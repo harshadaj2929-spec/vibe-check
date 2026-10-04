@@ -27,16 +27,21 @@ log = logging.getLogger(__name__)
 # Environment
 # ──────────────────────────────────────────────────────────────────────────────
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
-HF_TOKEN        = os.environ.get("HF_TOKEN", "")
+HF_TOKEN        = os.environ.get("HF_TOKEN", "")   # optional — see note below
 GROQ_API_KEY    = os.environ.get("GROQ_API_KEY", "")
 
+# HF_TOKEN is intentionally optional: the Inference API works unauthenticated
+# at a shared/rate-limited quota — fine for demos. Add the token as a Render
+# secret to unlock the full rate limit without any code change.
 _missing = [k for k, v in {
     "YOUTUBE_API_KEY": YOUTUBE_API_KEY,
-    "HF_TOKEN": HF_TOKEN,
-    "GROQ_API_KEY": GROQ_API_KEY,
+    "GROQ_API_KEY":    GROQ_API_KEY,
 }.items() if not v]
 if _missing:
     raise RuntimeError(f"Missing required environment variables: {', '.join(_missing)}")
+
+if not HF_TOKEN:
+    log.warning("HF_TOKEN not set — calling HF Inference API unauthenticated (shared rate limit).")
 
 
 HF_MODEL_URL = (
@@ -170,9 +175,12 @@ async def classify_comment(comment: str, semaphore: asyncio.Semaphore) -> dict:
     async with semaphore:
         for attempt in range(3):
             try:
+                hf_headers = {}
+                if HF_TOKEN:
+                    hf_headers["Authorization"] = f"Bearer {HF_TOKEN}"
                 resp = await http_client.post(
                     HF_MODEL_URL,
-                    headers={"Authorization": f"Bearer {HF_TOKEN}"},
+                    headers=hf_headers,
                     json={"inputs": comment},
                     timeout=30.0,
                 )
