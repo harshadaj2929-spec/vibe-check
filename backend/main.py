@@ -26,9 +26,18 @@ log = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 # Environment
 # ──────────────────────────────────────────────────────────────────────────────
-YOUTUBE_API_KEY = os.environ["YOUTUBE_API_KEY"]
-HF_TOKEN = os.environ["HF_TOKEN"]
-GROQ_API_KEY = os.environ["GROQ_API_KEY"]
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
+HF_TOKEN        = os.environ.get("HF_TOKEN", "")
+GROQ_API_KEY    = os.environ.get("GROQ_API_KEY", "")
+
+_missing = [k for k, v in {
+    "YOUTUBE_API_KEY": YOUTUBE_API_KEY,
+    "HF_TOKEN": HF_TOKEN,
+    "GROQ_API_KEY": GROQ_API_KEY,
+}.items() if not v]
+if _missing:
+    raise RuntimeError(f"Missing required environment variables: {', '.join(_missing)}")
+
 
 HF_MODEL_URL = (
     "https://api-inference.huggingface.co/models/harshu2929/vibe-check-xlm-roberta"
