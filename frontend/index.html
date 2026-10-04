@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vibe Check ✦ YouTube Sentiment</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+  <!-- ── HEADER ─────────────────────────────────────────────────────────── -->
+  <header class="site-header">
+    <div class="logo">
+      <span class="logo-icon">◈</span>
+      <span class="logo-text">Vibe<span class="accent">Check</span></span>
+    </div>
+    <p class="tagline">AI-powered YouTube comment sentiment · Powered by xlm-roberta + Groq</p>
+  </header>
+
+  <!-- ── HERO INPUT ─────────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="hero-inner">
+      <h1 class="hero-title">What's the vibe?</h1>
+      <p class="hero-sub">Drop any YouTube URL and get an instant AI sentiment breakdown of its comments.</p>
+
+      <form class="input-row" id="analyzeForm" autocomplete="off">
+        <div class="input-wrap">
+          <span class="input-icon">▶</span>
+          <input
+            type="text"
+            id="urlInput"
+            class="url-input"
+            placeholder="youtube.com/watch?v=… or youtu.be/…"
+            spellcheck="false"
+          />
+        </div>
+        <button type="submit" class="btn-analyze" id="analyzeBtn">
+          <span class="btn-label">Check Vibe</span>
+          <span class="btn-spinner" aria-hidden="true"></span>
+        </button>
+      </form>
+
+      <div class="input-hint" id="inputHint">
+        Supports youtube.com/watch?v=, youtu.be/, Shorts, and bare video IDs
+      </div>
+    </div>
+  </section>
+
+  <!-- ── AGENT STATUS TICKER ────────────────────────────────────────────── -->
+  <div class="agent-status" id="agentStatus" aria-live="polite" hidden>
+    <div class="agent-dot"></div>
+    <span class="agent-msg" id="agentMsg">Initialising…</span>
+  </div>
+
+  <!-- ── RESULTS ─────────────────────────────────────────────────────────── -->
+  <main class="results" id="results" hidden>
+
+    <!-- ── VIBE METER ──────────────────────────────────────────────────── -->
+    <section class="meter-section">
+      <div class="meter-container">
+        <div class="meter-label-row">
+          <span class="meter-label-bad">Negative</span>
+          <span class="meter-label-score" id="vibeScoreLabel">0</span>
+          <span class="meter-label-good">Positive</span>
+        </div>
+
+        <!-- Equaliser bars -->
+        <div class="eq-container" id="eqContainer" aria-hidden="true">
+          <!-- bars injected by JS -->
+        </div>
+
+        <!-- Arc gauge underneath -->
+        <div class="arc-gauge">
+          <svg class="arc-svg" viewBox="0 0 260 140" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%"   stop-color="#ff4d4d" />
+                <stop offset="50%"  stop-color="#f5d020" />
+                <stop offset="100%" stop-color="#00e676" />
+              </linearGradient>
+              <filter id="glow">
+                <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                <feMerge>
+                  <feMergeNode in="coloredBlur"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+            </defs>
+            <!-- Track -->
+            <path class="arc-track" d="M 20 130 A 110 110 0 0 1 240 130" />
+            <!-- Coloured fill (clip by needle angle) -->
+            <path class="arc-fill" id="arcFill" d="M 20 130 A 110 110 0 0 1 240 130" />
+            <!-- Needle -->
+            <line class="arc-needle" id="arcNeedle"
+              x1="130" y1="130" x2="130" y2="25"
+              filter="url(#glow)"
+            />
+            <circle cx="130" cy="130" r="5" class="needle-hub" />
+          </svg>
+          <div class="arc-score-badge" id="arcScoreBadge">—</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── STAT CARDS ─────────────────────────────────────────────────── -->
+    <section class="stats-grid">
+      <div class="stat-card positive">
+        <div class="stat-icon">↑</div>
+        <div class="stat-pct" id="statPos">—</div>
+        <div class="stat-count" id="statPosCount">— comments</div>
+        <div class="stat-label">Positive</div>
+      </div>
+      <div class="stat-card neutral">
+        <div class="stat-icon">→</div>
+        <div class="stat-pct" id="statNeu">—</div>
+        <div class="stat-count" id="statNeuCount">— comments</div>
+        <div class="stat-label">Neutral</div>
+      </div>
+      <div class="stat-card negative">
+        <div class="stat-icon">↓</div>
+        <div class="stat-pct" id="statNeg">—</div>
+        <div class="stat-count" id="statNegCount">— comments</div>
+        <div class="stat-label">Negative</div>
+      </div>
+    </section>
+
+    <!-- ── NARRATIVE ─────────────────────────────────────────────────── -->
+    <section class="narrative-section">
+      <div class="narrative-header">
+        <span class="narrative-icon">◈</span>
+        <h2 class="narrative-title">AI Vibe Summary</h2>
+        <span class="narrative-model">llama-3.1-8b via Groq</span>
+      </div>
+      <div class="narrative-body" id="narrativeBody">
+        <p class="narrative-text" id="narrativeText"></p>
+      </div>
+    </section>
+
+    <!-- ── TOP COMMENTS ──────────────────────────────────────────────── -->
+    <section class="top-comments-section">
+      <h2 class="section-title">Most Representative Comments</h2>
+      <div class="comments-grid">
+        <div class="comment-col positive">
+          <div class="col-header">
+            <span class="col-dot"></span>Positive
+          </div>
+          <div class="comment-list" id="topPos"></div>
+        </div>
+        <div class="comment-col neutral">
+          <div class="col-header">
+            <span class="col-dot"></span>Neutral
+          </div>
+          <div class="comment-list" id="topNeu"></div>
+        </div>
+        <div class="comment-col negative">
+          <div class="col-header">
+            <span class="col-dot"></span>Negative
+          </div>
+          <div class="comment-list" id="topNeg"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Q&A AGENT ─────────────────────────────────────────────────── -->
+    <section class="qa-section">
+      <div class="qa-header">
+        <span class="qa-icon">⟡</span>
+        <h2 class="qa-title">Ask the Comments</h2>
+        <span class="qa-badge">RAG Agent</span>
+      </div>
+      <p class="qa-sub">Ask anything about what viewers are saying — the agent reads the comments to answer.</p>
+
+      <form class="qa-form" id="qaForm" autocomplete="off">
+        <input
+          type="text"
+          class="qa-input"
+          id="qaInput"
+          placeholder="e.g. What are people complaining about? Any language trends?"
+        />
+        <button type="submit" class="btn-qa" id="qaBtn">
+          <span class="btn-label">Ask</span>
+          <span class="btn-spinner" aria-hidden="true"></span>
+        </button>
+      </form>
+
+      <div class="qa-answer-wrap" id="qaAnswerWrap" hidden>
+        <div class="qa-answer-header">
+          <span class="qa-answer-icon">◈</span> Agent Answer
+        </div>
+        <p class="qa-answer-text" id="qaAnswerText"></p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── ERROR TOAST ───────────────────────────────────────────────────── -->
+  <div class="error-toast" id="errorToast" role="alert" aria-live="assertive" hidden>
+    <span class="error-icon">⚠</span>
+    <span class="error-msg" id="errorMsg">Something went wrong.</span>
+    <button class="error-close" onclick="document.getElementById('errorToast').hidden=true">✕</button>
+  </div>
+
+  <!-- ── FOOTER ────────────────────────────────────────────────────────── -->
+  <footer class="site-footer">
+    <p>Vibe Check · xlm-roberta sentiment · Groq Insight Agent · Built on Hugging Face Spaces</p>
+  </footer>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
