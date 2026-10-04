@@ -51,7 +51,8 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "llama-3.1-8b-instant"
 
 YOUTUBE_COMMENTS_URL = "https://www.googleapis.com/youtube/v3/commentThreads"
-MAX_COMMENTS = 200
+MAX_COMMENTS = 100          # lower limit for unauthenticated HF inference
+HF_BATCH_SIZE = 8           # comments per HF Inference API call (batch mode)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Pydantic models
@@ -170,47 +171,73 @@ async def fetch_comments(video_id: str) -> list[str]:
     return comments
 
 
-async def classify_comment(comment: str, semaphore: asyncio.Semaphore) -> dict:
-    """Call HF Inference API for a single comment. Returns label + score."""
+async def classify_batch(batch: list[str], semaphore: asyncio.Semaphore) -> list[dict]:
+    """Call HF Inference API with a batch of comments in one request."""
     async with semaphore:
         for attempt in range(3):
             try:
-                hf_headers = {}
+                hf_headers = {"Content-Type": "application/json"}
                 if HF_TOKEN:
                     hf_headers["Authorization"] = f"Bearer {HF_TOKEN}"
                 resp = await http_client.post(
                     HF_MODEL_URL,
                     headers=hf_headers,
-                    json={"inputs": comment},
-                    timeout=30.0,
+                    json={"inputs": batch},
+                    timeout=45.0,
                 )
                 if resp.status_code == 503:
-                    # Model loading — wait and retry
                     wait = resp.json().get("estimated_time", 20)
                     log.info("HF model loading, waiting %.0fs …", wait)
                     await asyncio.sleep(min(wait, 30))
                     continue
                 resp.raise_for_status()
                 result = resp.json()
-                # HF returns [[{label, score}, ...]] for sequence classification
-                if isinstance(result, list) and isinstance(result[0], list):
-                    best = max(result[0], key=lambda x: x["score"])
-                else:
-                    best = max(result, key=lambda x: x["score"])
-                return {"text": comment, "label": best["label"].lower(), "score": best["score"]}
+
+                # HF batch returns a list of lists: [[{label,score},...], ...]
+                out = []
+                for i, comment in enumerate(batch):
+                    try:
+                        preds = result[i]
+                        # each element is a list of class scores
+                        if isinstance(preds, list):
+                            best = max(preds, key=lambda x: x["score"])
+                        else:
+                            best = preds
+                        out.append({
+                            "text": comment,
+                            "label": best["label"].lower(),
+                            "score": best["score"],
+                        })
+                    except Exception:
+                        out.append({"text": comment, "label": "neutral", "score": 0.5})
+                return out
+
             except (httpx.TimeoutException, httpx.NetworkError) as exc:
                 if attempt == 2:
-                    log.warning("HF classify failed after 3 attempts: %s", exc)
-                    return {"text": comment, "label": "neutral", "score": 0.5}
+                    log.warning("HF batch failed after 3 attempts: %s", exc)
+                    return [{"text": c, "label": "neutral", "score": 0.5} for c in batch]
                 await asyncio.sleep(2 ** attempt)
-        return {"text": comment, "label": "neutral", "score": 0.5}
+
+        return [{"text": c, "label": "neutral", "score": 0.5} for c in batch]
 
 
 async def classify_all(comments: list[str]) -> list[dict]:
-    """Classify all comments concurrently with a semaphore to avoid rate limits."""
-    semaphore = asyncio.Semaphore(5)   # max 5 concurrent HF calls
-    tasks = [classify_comment(c, semaphore) for c in comments]
-    return await asyncio.gather(*tasks)
+    """Classify all comments using batched HF Inference API calls."""
+    # Split into batches
+    batches = [
+        comments[i: i + HF_BATCH_SIZE]
+        for i in range(0, len(comments), HF_BATCH_SIZE)
+    ]
+    log.info("Classifying %d comments in %d batches", len(comments), len(batches))
+
+    # Max 3 concurrent batch requests — avoids hammering unauthenticated endpoint
+    semaphore = asyncio.Semaphore(3)
+    tasks = [classify_batch(b, semaphore) for b in batches]
+    batch_results = await asyncio.gather(*tasks)
+
+    # Flatten
+    return [item for batch in batch_results for item in batch]
+
 
 
 def aggregate_results(classified: list[dict]) -> dict:
