@@ -41,7 +41,7 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "openai/gpt-oss-20b"
 
 YOUTUBE_COMMENTS_URL = "https://www.googleapis.com/youtube/v3/commentThreads"
-MAX_COMMENTS = 100               # limit for free tier Groq
+MAX_COMMENTS = 50                # limit to stay under Groq 8000 TPM
 GROQ_CLASSIFY_BATCH_SIZE = 15    # comments per Groq API call for classification
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -178,7 +178,9 @@ async def classify_batch_groq(batch: list[str], semaphore: asyncio.Semaphore) ->
 
             input_text = "Inputs to classify:\n"
             for i, c in enumerate(batch):
-                input_text += f"{i+1}. {c}\n"
+                # Truncate to save tokens (limit is 8000 TPM)
+                trunc_c = c[:300] + "..." if len(c) > 300 else c
+                input_text += f"{i+1}. {trunc_c}\n"
 
             payload = {
                 "model": GROQ_MODEL,
@@ -197,7 +199,10 @@ async def classify_batch_groq(batch: list[str], semaphore: asyncio.Semaphore) ->
                     json=payload,
                     timeout=45.0
                 )
-                resp.raise_for_status()
+                if not resp.is_success:
+                    log.error(f"Groq API error {resp.status_code} in batch: {resp.text}")
+                    resp.raise_for_status()
+                    
                 data = resp.json()
                 content = data["choices"][0]["message"]["content"]
                 parsed = json.loads(content)
@@ -287,8 +292,11 @@ async def call_groq(messages: list[dict], max_tokens: int = 500) -> str:
         timeout=30.0,
     )
     if resp.status_code == 429:
+        log.warning(f"Groq 429 limit hit. Body: {resp.text}")
         raise HTTPException(429, "Groq rate limit hit. Please wait a moment and try again.")
-    resp.raise_for_status()
+    if not resp.is_success:
+        log.error(f"Groq API error {resp.status_code}: {resp.text}")
+        resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"].strip()
 
 
