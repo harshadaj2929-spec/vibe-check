@@ -27,12 +27,8 @@ log = logging.getLogger(__name__)
 # Environment
 # ──────────────────────────────────────────────────────────────────────────────
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
-HF_TOKEN        = os.environ.get("HF_TOKEN", "")   # optional — see note below
 GROQ_API_KEY    = os.environ.get("GROQ_API_KEY", "")
 
-# HF_TOKEN is intentionally optional: the Inference API works unauthenticated
-# at a shared/rate-limited quota — fine for demos. Add the token as a Render
-# secret to unlock the full rate limit without any code change.
 _missing = [k for k, v in {
     "YOUTUBE_API_KEY": YOUTUBE_API_KEY,
     "GROQ_API_KEY":    GROQ_API_KEY,
@@ -40,19 +36,13 @@ _missing = [k for k, v in {
 if _missing:
     raise RuntimeError(f"Missing required environment variables: {', '.join(_missing)}")
 
-if not HF_TOKEN:
-    log.warning("HF_TOKEN not set — calling HF Inference API unauthenticated (shared rate limit).")
 
-
-HF_MODEL_URL = (
-    "https://api-inference.huggingface.co/models/harshu2929/vibe-check-xlm-roberta"
-)
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "llama-3.1-8b-instant"
+GROQ_MODEL = "openai/gpt-oss-20b"
 
 YOUTUBE_COMMENTS_URL = "https://www.googleapis.com/youtube/v3/commentThreads"
-MAX_COMMENTS = 100          # lower limit for unauthenticated HF inference
-HF_BATCH_SIZE = 8           # comments per HF Inference API call (batch mode)
+MAX_COMMENTS = 100               # limit for free tier Groq
+GROQ_CLASSIFY_BATCH_SIZE = 15    # comments per Groq API call for classification
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Pydantic models
@@ -171,71 +161,79 @@ async def fetch_comments(video_id: str) -> list[str]:
     return comments
 
 
-async def classify_batch(batch: list[str], semaphore: asyncio.Semaphore) -> list[dict]:
-    """Call HF Inference API with a batch of comments in one request."""
+import json
+
+async def classify_batch_groq(batch: list[str], semaphore: asyncio.Semaphore) -> list[dict]:
+    """Call Groq to classify a batch of comments."""
     async with semaphore:
-        for attempt in range(3):
+        for attempt in range(1, 3):
+            system_prompt = (
+                "You are a strict JSON-only sentiment classification API. "
+                "Classify the sentiment of each input comment as exactly 'positive', 'negative', or 'neutral'. "
+                "You must return ONLY a valid JSON object with a single key 'labels' containing a list of strings. "
+                f"The 'labels' list MUST contain exactly {len(batch)} items, in the exact same order as the inputs."
+            )
+            if attempt > 1:
+                system_prompt += " ERROR: Your previous response was invalid or had the wrong number of labels. YOU MUST RETURN EXACTLY VALID JSON AND EXACTLY THE RIGHT NUMBER OF LABELS."
+
+            input_text = "Inputs to classify:\n"
+            for i, c in enumerate(batch):
+                input_text += f"{i+1}. {c}\n"
+
+            payload = {
+                "model": GROQ_MODEL,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": input_text}
+                ],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.0
+            }
+
             try:
-                hf_headers = {"Content-Type": "application/json"}
-                if HF_TOKEN:
-                    hf_headers["Authorization"] = f"Bearer {HF_TOKEN}"
                 resp = await http_client.post(
-                    HF_MODEL_URL,
-                    headers=hf_headers,
-                    json={"inputs": batch},
-                    timeout=45.0,
+                    GROQ_URL,
+                    headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+                    json=payload,
+                    timeout=45.0
                 )
-                if resp.status_code == 503:
-                    wait = resp.json().get("estimated_time", 20)
-                    log.info("HF model loading, waiting %.0fs …", wait)
-                    await asyncio.sleep(min(wait, 30))
-                    continue
                 resp.raise_for_status()
-                result = resp.json()
+                data = resp.json()
+                content = data["choices"][0]["message"]["content"]
+                parsed = json.loads(content)
+                labels = parsed.get("labels", [])
 
-                # HF batch returns a list of lists: [[{label,score},...], ...]
-                out = []
-                for i, comment in enumerate(batch):
-                    try:
-                        preds = result[i]
-                        # each element is a list of class scores
-                        if isinstance(preds, list):
-                            best = max(preds, key=lambda x: x["score"])
-                        else:
-                            best = preds
-                        out.append({
-                            "text": comment,
-                            "label": best["label"].lower(),
-                            "score": best["score"],
-                        })
-                    except Exception:
-                        out.append({"text": comment, "label": "neutral", "score": 0.5})
-                return out
+                if isinstance(labels, list) and len(labels) == len(batch):
+                    valid_labels = {"positive", "negative", "neutral"}
+                    out = []
+                    for comment, label in zip(batch, labels):
+                        lbl = str(label).strip().lower()
+                        if lbl not in valid_labels:
+                            lbl = "neutral"
+                        out.append({"text": comment, "label": lbl, "score": 1.0})
+                    return out
+                else:
+                    log.warning(f"Groq batch length mismatch. Expected {len(batch)}, got {len(labels) if isinstance(labels, list) else 'invalid'}. Retrying...")
+            except Exception as e:
+                log.warning(f"Groq batch exception: {e}. Retrying...")
 
-            except (httpx.TimeoutException, httpx.NetworkError) as exc:
-                if attempt == 2:
-                    log.warning("HF batch failed after 3 attempts: %s", exc)
-                    return [{"text": c, "label": "neutral", "score": 0.5} for c in batch]
-                await asyncio.sleep(2 ** attempt)
-
-        return [{"text": c, "label": "neutral", "score": 0.5} for c in batch]
-
+        log.warning("Groq batch failed after retries. Skipping batch.")
+        return []
 
 async def classify_all(comments: list[str]) -> list[dict]:
-    """Classify all comments using batched HF Inference API calls."""
-    # Split into batches
+    """Classify all comments using batched Groq API calls."""
     batches = [
-        comments[i: i + HF_BATCH_SIZE]
-        for i in range(0, len(comments), HF_BATCH_SIZE)
+        comments[i: i + GROQ_CLASSIFY_BATCH_SIZE]
+        for i in range(0, len(comments), GROQ_CLASSIFY_BATCH_SIZE)
     ]
-    log.info("Classifying %d comments in %d batches", len(comments), len(batches))
+    log.info("Classifying %d comments in %d batches via Groq", len(comments), len(batches))
 
-    # Max 3 concurrent batch requests — avoids hammering unauthenticated endpoint
-    semaphore = asyncio.Semaphore(3)
-    tasks = [classify_batch(b, semaphore) for b in batches]
+    # Limit concurrent Groq calls to avoid rate limits
+    semaphore = asyncio.Semaphore(2)
+    tasks = [classify_batch_groq(b, semaphore) for b in batches]
     batch_results = await asyncio.gather(*tasks)
 
-    # Flatten
+    # Flatten and return only validly classified comments
     return [item for batch in batch_results for item in batch]
 
 
