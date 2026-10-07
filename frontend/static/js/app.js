@@ -241,7 +241,7 @@ if(analyzeForm) {
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video_url: url })
+        body: JSON.stringify({ url: url })
       });
       
       if (!res.ok) {
