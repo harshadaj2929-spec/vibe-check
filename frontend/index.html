@@ -11,201 +11,282 @@
 </head>
 <body>
 
-  <!-- ── HEADER ─────────────────────────────────────────────────────────── -->
+  <!-- HEADER & NAV -->
   <header class="site-header">
     <div class="logo">
       <span class="logo-icon">◈</span>
       <span class="logo-text">Vibe<span class="accent">Check</span></span>
     </div>
-    <p class="tagline">AI-powered YouTube comment sentiment · Powered by xlm-roberta + Groq</p>
+    <nav class="site-nav">
+      <a href="#/home" class="nav-link active" id="nav-home">Home</a>
+      <a href="#/comments" class="nav-link" id="nav-comments">Comments</a>
+      <a href="#/similar-video" class="nav-link" id="nav-similar">Similar Video</a>
+      <a href="#/comparison" class="nav-link" id="nav-comparison">Comparison</a>
+      <a href="#/ask-comments" class="nav-link" id="nav-ask-comments">Ask Comments</a>
+    </nav>
   </header>
 
-  <!-- ── HERO INPUT ─────────────────────────────────────────────────────── -->
-  <section class="hero">
-    <div class="hero-inner">
-      <h1 class="hero-title">What's the vibe?</h1>
-      <p class="hero-sub">Drop any YouTube URL and get an instant AI sentiment breakdown of its comments.</p>
-
-      <form class="input-row" id="analyzeForm" autocomplete="off">
-        <div class="input-wrap">
-          <span class="input-icon">▶</span>
-          <input
-            type="text"
-            id="urlInput"
-            class="url-input"
-            placeholder="youtube.com/watch?v=… or youtu.be/…"
-            spellcheck="false"
-          />
-        </div>
-        <button type="submit" class="btn-analyze" id="analyzeBtn">
-          <span class="btn-label">Check Vibe</span>
-          <span class="btn-spinner" aria-hidden="true"></span>
-        </button>
-      </form>
-
-      <div class="input-hint" id="inputHint">
-        Supports youtube.com/watch?v=, youtu.be/, Shorts, and bare video IDs
-      </div>
-    </div>
-  </section>
-
-  <!-- ── AGENT STATUS TICKER ────────────────────────────────────────────── -->
+  <!-- AGENT STATUS TICKER -->
   <div class="agent-status" id="agentStatus" aria-live="polite" hidden>
     <div class="agent-dot"></div>
     <span class="agent-msg" id="agentMsg">Initialising…</span>
   </div>
 
-  <!-- ── RESULTS ─────────────────────────────────────────────────────────── -->
-  <main class="results" id="results" hidden>
+  <main id="app-container">
 
-    <!-- ── VIBE METER ──────────────────────────────────────────────────── -->
-    <section class="meter-section">
-      <div class="meter-container">
-        <div class="meter-label-row">
-          <span class="meter-label-bad">Negative</span>
-          <span class="meter-label-score" id="vibeScoreLabel">0</span>
-          <span class="meter-label-good">Positive</span>
+    <!-- PAGE: HOME -->
+    <div id="page-home" class="page-view">
+      <section class="hero">
+        <div class="hero-inner">
+          <h1 class="hero-title">What's the vibe?</h1>
+          <p class="hero-sub">Drop any YouTube URL and get an instant AI sentiment breakdown.</p>
+          <form class="input-row" id="analyzeForm" autocomplete="off">
+            <div class="input-wrap">
+              <span class="input-icon">▶</span>
+              <input type="text" id="urlInput" class="url-input" placeholder="youtube.com/watch?v=… or youtu.be/…" spellcheck="false" />
+            </div>
+            <button type="submit" class="btn-analyze" id="analyzeBtn">
+              <span class="btn-label">Check Vibe</span>
+              <span class="btn-spinner" aria-hidden="true"></span>
+            </button>
+          </form>
+          <div class="input-hint" id="inputHint">Supports youtube.com/watch?v=, Shorts, and IDs</div>
         </div>
+      </section>
 
-        <!-- Equaliser bars -->
-        <div class="eq-container" id="eqContainer" aria-hidden="true">
-          <!-- bars injected by JS -->
-        </div>
-
-        <!-- Arc gauge underneath -->
-        <div class="arc-gauge">
-          <svg class="arc-svg" viewBox="0 0 260 140" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%"   stop-color="#ff4d4d" />
-                <stop offset="50%"  stop-color="#f5d020" />
-                <stop offset="100%" stop-color="#00e676" />
-              </linearGradient>
-              <filter id="glow">
-                <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                <feMerge>
-                  <feMergeNode in="coloredBlur"/>
-                  <feMergeNode in="SourceGraphic"/>
-                </feMerge>
-              </filter>
-            </defs>
-            <!-- Track -->
-            <path class="arc-track" d="M 20 130 A 110 110 0 0 1 240 130" />
-            <!-- Coloured fill (clip by needle angle) -->
-            <path class="arc-fill" id="arcFill" d="M 20 130 A 110 110 0 0 1 240 130" />
-            <!-- Needle -->
-            <line class="arc-needle" id="arcNeedle"
-              x1="130" y1="130" x2="130" y2="25"
-              filter="url(#glow)"
-            />
-            <circle cx="130" cy="130" r="5" class="needle-hub" />
-          </svg>
-          <div class="arc-score-badge" id="arcScoreBadge">—</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── STAT CARDS ─────────────────────────────────────────────────── -->
-    <section class="stats-grid">
-      <div class="stat-card positive">
-        <div class="stat-icon">↑</div>
-        <div class="stat-pct" id="statPos">—</div>
-        <div class="stat-count" id="statPosCount">— comments</div>
-        <div class="stat-label">Positive</div>
-      </div>
-      <div class="stat-card neutral">
-        <div class="stat-icon">→</div>
-        <div class="stat-pct" id="statNeu">—</div>
-        <div class="stat-count" id="statNeuCount">— comments</div>
-        <div class="stat-label">Neutral</div>
-      </div>
-      <div class="stat-card negative">
-        <div class="stat-icon">↓</div>
-        <div class="stat-pct" id="statNeg">—</div>
-        <div class="stat-count" id="statNegCount">— comments</div>
-        <div class="stat-label">Negative</div>
-      </div>
-    </section>
-
-    <!-- ── NARRATIVE ─────────────────────────────────────────────────── -->
-    <section class="narrative-section">
-      <div class="narrative-header">
-        <span class="narrative-icon">◈</span>
-        <h2 class="narrative-title">AI Vibe Summary</h2>
-        <span class="narrative-model">llama-3.1-8b via Groq</span>
-      </div>
-      <div class="narrative-body" id="narrativeBody">
-        <p class="narrative-text" id="narrativeText"></p>
-      </div>
-    </section>
-
-    <!-- ── TOP COMMENTS ──────────────────────────────────────────────── -->
-    <section class="top-comments-section">
-      <h2 class="section-title">Most Representative Comments</h2>
-      <div class="comments-grid">
-        <div class="comment-col positive">
-          <div class="col-header">
-            <span class="col-dot"></span>Positive
+      <div id="home-results" hidden>
+        <!-- VIBE METER -->
+        <section class="meter-section">
+          <div class="meter-container">
+            <div class="meter-label-row">
+              <span class="meter-label-bad">Negative</span>
+              <span class="meter-label-score" id="vibeScoreLabel">0</span>
+              <span class="meter-label-good">Positive</span>
+            </div>
+            <div class="eq-container" id="eqContainer" aria-hidden="true"></div>
+            <div class="arc-gauge">
+              <svg class="arc-svg" viewBox="0 0 260 140">
+                <defs>
+                  <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#ff4d4d" />
+                    <stop offset="50%" stop-color="#f5d020" />
+                    <stop offset="100%" stop-color="#00e676" />
+                  </linearGradient>
+                </defs>
+                <path class="arc-track" d="M 20 130 A 110 110 0 0 1 240 130" />
+                <path class="arc-fill" id="arcFill" d="M 20 130 A 110 110 0 0 1 240 130" />
+                <line class="arc-needle" id="arcNeedle" x1="130" y1="130" x2="130" y2="25" />
+                <circle cx="130" cy="130" r="5" class="needle-hub" />
+              </svg>
+              <div class="arc-score-badge" id="arcScoreBadge">—</div>
+            </div>
           </div>
-          <div class="comment-list" id="topPos"></div>
-        </div>
-        <div class="comment-col neutral">
-          <div class="col-header">
-            <span class="col-dot"></span>Neutral
+        </section>
+
+        <!-- STATS -->
+        <h2 class="section-title">Sentiment Breakdown</h2>
+        <section class="stats-grid">
+          <div class="stat-card positive"><div class="stat-icon">↑</div><div class="stat-pct" id="statPos">—</div><div class="stat-count" id="statPosCount">—</div><div class="stat-label">Positive</div></div>
+          <div class="stat-card neutral"><div class="stat-icon">→</div><div class="stat-pct" id="statNeu">—</div><div class="stat-count" id="statNeuCount">—</div><div class="stat-label">Neutral</div></div>
+          <div class="stat-card negative"><div class="stat-icon">↓</div><div class="stat-pct" id="statNeg">—</div><div class="stat-count" id="statNegCount">—</div><div class="stat-label">Negative</div></div>
+        </section>
+
+        <h2 class="section-title" style="margin-top: 2rem;">Content Safety</h2>
+        <section class="stats-grid stats-grid-4">
+          <div class="stat-card hate"><div class="stat-icon">⚠</div><div class="stat-pct" id="statHate">—</div><div class="stat-count" id="statHateCount">—</div><div class="stat-label">Hate</div></div>
+          <div class="stat-card good"><div class="stat-icon">★</div><div class="stat-pct" id="statGood">—</div><div class="stat-count" id="statGoodCount">—</div><div class="stat-label">Good</div></div>
+          <div class="stat-card bad"><div class="stat-icon">🗑</div><div class="stat-pct" id="statBad">—</div><div class="stat-count" id="statBadCount">—</div><div class="stat-label">Bad</div></div>
+          <div class="stat-card none"><div class="stat-icon">○</div><div class="stat-pct" id="statNone">—</div><div class="stat-count" id="statNoneCount">—</div><div class="stat-label">None</div></div>
+        </section>
+
+        <!-- NARRATIVE -->
+        <section class="narrative-section">
+          <div class="narrative-header">
+            <span class="narrative-icon">◈</span>
+            <h2 class="narrative-title">AI Vibe Summary</h2>
+            <span class="narrative-model">Groq RAG</span>
           </div>
-          <div class="comment-list" id="topNeu"></div>
+          <div class="narrative-body"><p class="narrative-text" id="narrativeText"></p></div>
+        </section>
+        
+        
+        <div style="text-align:center; margin-top: 3rem;">
+          <button class="btn-analyze" onclick="window.location.hash='#/comments'" style="width:auto; padding: 0.75rem 2rem;">View All Comments →</button>
         </div>
-        <div class="comment-col negative">
-          <div class="col-header">
-            <span class="col-dot"></span>Negative
+
+      </div>
+    </div>
+
+    <!-- PAGE: SIMILAR VIDEO -->
+    <div id="page-similar" class="page-view" hidden>
+      <div class="empty-state" id="empty-similar" hidden>
+        <h2>Analyze a YouTube video first to view this page.</h2>
+        <button class="btn-analyze" onclick="location.hash='#/home'">Go to Analysis</button>
+      </div>
+      
+      <div id="similar-results" hidden>
+        <div class="narrative-header" style="margin-bottom:1.5rem">
+          <span class="narrative-icon">🔗</span>
+          <h2 class="narrative-title">Similar Video Agent</h2>
+        </div>
+        
+        <div class="narrative-section" id="similarVideoCard">
+          <h3><span id="svTitle"></span></h3>
+          <p style="color:var(--muted); margin-bottom: 1rem;">Channel: <span id="svChannel" style="color:var(--fg)"></span> | Similarity Score: <span id="svScore" style="color:var(--fg)"></span></p>
+        </div>
+
+        <h2 class="section-title" style="margin-top: 2rem;">Similar Video Sentiment</h2>
+        <section class="stats-grid">
+          <div class="stat-card positive"><div class="stat-icon">↑</div><div class="stat-pct" id="svPos">—</div><div class="stat-label">Positive</div></div>
+          <div class="stat-card neutral"><div class="stat-icon">→</div><div class="stat-pct" id="svNeu">—</div><div class="stat-label">Neutral</div></div>
+          <div class="stat-card negative"><div class="stat-icon">↓</div><div class="stat-pct" id="svNeg">—</div><div class="stat-label">Negative</div></div>
+        </section>
+
+        <h2 class="section-title" style="margin-top: 2rem;">Similar Video Safety</h2>
+        <section class="stats-grid stats-grid-4">
+          <div class="stat-card hate"><div class="stat-pct" id="svHate">—</div><div class="stat-label">Hate</div></div>
+          <div class="stat-card good"><div class="stat-pct" id="svGood">—</div><div class="stat-label">Good</div></div>
+          <div class="stat-card bad"><div class="stat-pct" id="svBad">—</div><div class="stat-label">Bad</div></div>
+          <div class="stat-card none"><div class="stat-pct" id="svNone">—</div><div class="stat-label">None</div></div>
+        </section>
+
+        <div style="text-align: center; margin-top: 2rem;">
+          <h3 style="font-size:1.5rem; margin-bottom: 0.5rem">Similar Video Vibe Score: <span id="svVibeScore" style="color:var(--accent)">—</span></h3>
+          <p style="color:var(--muted)">Analyzed <span id="svTotalCount">0</span> comments.</p>
+        </div>
+      </div>
+      
+      <div id="similar-unavailable" class="empty-state" hidden>
+        <h2>No sufficiently similar video was found.</h2>
+        <p>The Similar Video Agent did not return a match for this analysis.</p>
+      </div>
+    </div>
+
+    <!-- PAGE: COMPARISON -->
+    <div id="page-comparison" class="page-view" hidden>
+      <div class="empty-state" id="empty-comparison" hidden>
+        <h2>Analyze a YouTube video first to view this page.</h2>
+        <button class="btn-analyze" onclick="location.hash='#/home'">Go to Analysis</button>
+      </div>
+
+      <div id="comparison-results" hidden>
+        <div class="narrative-header" style="margin-bottom:1.5rem">
+          <span class="narrative-icon">⚖️</span>
+          <h2 class="narrative-title">Comparison Agent</h2>
+        </div>
+
+        <section class="narrative-section">
+          <h3 style="margin-bottom: 1rem;">Primary Video vs Similar Video</h3>
+          <div style="display:flex; justify-content:space-between; margin-bottom: 1rem;">
+            <div>
+              <p><strong>Primary Video</strong></p>
+              <p>Positive: <span id="compPriPos"></span></p>
+              <p>Negative: <span id="compPriNeg"></span></p>
+              <p>Neutral: <span id="compPriNeu"></span></p>
+              <p>Vibe Score: <span id="compPriVibe"></span></p>
+              <p>Safety (Hate): <span id="compPriSafe"></span></p>
+            </div>
+            <div>
+              <p><strong>Similar Video</strong></p>
+              <p>Positive: <span id="compSimPos"></span></p>
+              <p>Negative: <span id="compSimNeg"></span></p>
+              <p>Neutral: <span id="compSimNeu"></span></p>
+              <p>Vibe Score: <span id="compSimVibe"></span></p>
+              <p>Safety (Hate): <span id="compSimSafe"></span></p>
+            </div>
           </div>
-          <div class="comment-list" id="topNeg"></div>
+          
+          <div style="margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1.5rem;">
+            <h3>🏆 Better audience response: <span id="compWinner" style="color:var(--accent); text-transform:capitalize;"></span></h3>
+            <p style="margin-top: 1rem;" id="compSummary"></p>
+            <p style="margin-top: 0.5rem; color:var(--muted); font-size: 0.9em;" id="compReason"></p>
+          </div>
+        </section>
+      </div>
+
+      <div id="comparison-unavailable" class="empty-state" hidden>
+        <h2>Comparison is unavailable for this analysis.</h2>
+        <p>Either the primary analysis failed or no similar video was found.</p>
+      </div>
+    </div>
+
+    <!-- PAGE: COMMENTS -->
+    <div id="page-comments" class="page-view" hidden>
+      <div class="empty-state" id="empty-comments-list" hidden>
+        <h2>Analyze a YouTube video first to view this page.</h2>
+        <button class="btn-analyze" onclick="location.hash='#/home'">Go to Analysis</button>
+      </div>
+
+      <div id="comments-list-results" hidden>
+        <h2 class="section-title" style="margin-bottom:1rem;">Categorized Comments</h2>
+        
+        <!-- Tabs / Filters -->
+        <div class="comments-filter-row">
+          <button class="filter-btn active" data-flag="all">All (<span id="count-all">0</span>)</button>
+          <button class="filter-btn" data-flag="hate">🔴 Hate (<span id="count-hate">0</span>)</button>
+          <button class="filter-btn" data-flag="good">🟢 Good (<span id="count-good">0</span>)</button>
+          <button class="filter-btn" data-flag="bad">🟠 Bad (<span id="count-bad">0</span>)</button>
+          <button class="filter-btn" data-flag="none">⚪ Other (<span id="count-none">0</span>)</button>
+        </div>
+        
+        <div class="comments-filter-row" style="margin-top: 0.5rem; justify-content: flex-start; gap: 0.5rem; margin-bottom: 2rem;">
+          <span style="font-size:0.85rem; color:var(--muted); margin-right: 0.5rem;">Sentiment Filter:</span>
+          <button class="filter-sentiment-btn active" data-sentiment="all">All</button>
+          <button class="filter-sentiment-btn" data-sentiment="positive">Positive</button>
+          <button class="filter-sentiment-btn" data-sentiment="neutral">Neutral</button>
+          <button class="filter-sentiment-btn" data-sentiment="negative">Negative</button>
+        </div>
+
+        <div id="categorized-comments-container">
+          <!-- Comments injected here -->
         </div>
       </div>
-    </section>
+    </div>
 
-    <!-- ── Q&A AGENT ─────────────────────────────────────────────────── -->
-    <section class="qa-section">
-      <div class="qa-header">
-        <span class="qa-icon">⟡</span>
-        <h2 class="qa-title">Ask the Comments</h2>
-        <span class="qa-badge">RAG Agent</span>
+    <!-- PAGE: ASK COMMENTS -->
+    <div id="page-ask-comments" class="page-view" hidden>
+      <div class="empty-state" id="empty-ask-comments" hidden>
+        <h2>Analyze a YouTube video first to view this page.</h2>
+        <button class="btn-analyze" onclick="location.hash='#/home'">Go to Analysis</button>
       </div>
-      <p class="qa-sub">Ask anything about what viewers are saying — the agent reads the comments to answer.</p>
 
-      <form class="qa-form" id="qaForm" autocomplete="off">
-        <input
-          type="text"
-          class="qa-input"
-          id="qaInput"
-          placeholder="e.g. What are people complaining about? Any language trends?"
-        />
-        <button type="submit" class="btn-qa" id="qaBtn">
-          <span class="btn-label">Ask</span>
-          <span class="btn-spinner" aria-hidden="true"></span>
-        </button>
-      </form>
+      <div id="ask-comments-results" hidden>
+        <section class="qa-section">
+          <div class="qa-header">
+            <span class="qa-icon">💬</span>
+            <h2 class="qa-title">Ask the Comments</h2>
+            <span class="qa-badge">RAG Agent</span>
+          </div>
+          <p class="qa-sub">Ask anything about what viewers are saying — the agent reads the comments to answer.</p>
 
-      <div class="qa-answer-wrap" id="qaAnswerWrap" hidden>
-        <div class="qa-answer-header">
-          <span class="qa-answer-icon">◈</span> Agent Answer
-        </div>
-        <p class="qa-answer-text" id="qaAnswerText"></p>
+          <form class="qa-form" id="qaForm" autocomplete="off">
+            <input type="text" class="qa-input" id="qaInput" placeholder="e.g. What are people complaining about?" />
+            <button type="submit" class="btn-qa" id="qaBtn">
+              <span class="btn-label">Ask</span>
+              <span class="btn-spinner" aria-hidden="true"></span>
+            </button>
+          </form>
+
+          <div class="qa-answer-wrap" id="qaAnswerWrap" hidden>
+            <div class="qa-answer-header">
+              <span class="qa-answer-icon">◈</span> Agent Answer
+            </div>
+            <p class="qa-answer-text" id="qaAnswerText"></p>
+          </div>
+        </section>
       </div>
-    </section>
+    </div>
 
   </main>
 
-  <!-- ── ERROR TOAST ───────────────────────────────────────────────────── -->
   <div class="error-toast" id="errorToast" role="alert" aria-live="assertive" hidden>
     <span class="error-icon">⚠</span>
     <span class="error-msg" id="errorMsg">Something went wrong.</span>
     <button class="error-close" onclick="document.getElementById('errorToast').hidden=true">✕</button>
   </div>
 
-  <!-- ── FOOTER ────────────────────────────────────────────────────────── -->
   <footer class="site-footer">
-    <p>Vibe Check · xlm-roberta sentiment · Groq Insight Agent · Built on Hugging Face Spaces</p>
+    <p>Vibe Check · Multi-Agent Analysis · Groq</p>
   </footer>
 
   <script src="/static/js/app.js"></script>

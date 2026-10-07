@@ -100,6 +100,7 @@ async def analyze(req: AnalyzeRequest):
             "top_comments": agg["top_comments"],
             "narrative": narrative,
             "raw_comments": comments,   # returned for Q&A agent frontend cache
+            "classified_comments": state.get("primary_classifications", []),
             
             "similar_video": state.get("similar_video"),
             "similar_analysis": state.get("similar_analysis"),
@@ -133,6 +134,7 @@ async def analyze(req: AnalyzeRequest):
                 "top_comments": agg["top_comments"],
                 "narrative": narrative,
                 "raw_comments": comments,
+                "classified_comments": classified,
             }
         except HTTPException:
             raise
