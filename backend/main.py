@@ -1,17 +1,19 @@
 """
-Vibe Check — FastAPI Backend
+Vibe Check — FastAPI Backend (v2)
 Sentiment analysis agent pipeline for YouTube comments.
 """
 
-import os
+import asyncio
+import json
 import logging
+import os
 from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 import backend.analysis as analysis
@@ -19,7 +21,7 @@ import backend.analysis as analysis
 # ──────────────────────────────────────────────────────────────────────────────
 # Logging
 # ──────────────────────────────────────────────────────────────────────────────
-logging.basicConfig(level=logging.INFO, format="%(levelname)s │ %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 log = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -30,9 +32,8 @@ class AnalyzeRequest(BaseModel):
     url: str
 
 class QARequest(BaseModel):
-    video_id: str
     question: str
-    comments: list[str]          # passed from frontend cache (already fetched)
+    comments: list[str]  # passed from frontend cache (already fetched)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # App lifespan — shared httpx client
@@ -41,7 +42,7 @@ class QARequest(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     analysis.http_client = httpx.AsyncClient(timeout=60.0)
-    log.info("HTTP client initialised in analysis module")
+    log.info("HTTP client initialised")
     yield
     await analysis.http_client.aclose()
     log.info("HTTP client closed")
@@ -65,7 +66,7 @@ app.add_middleware(
 
 @app.post("/api/analyze")
 async def analyze(req: AnalyzeRequest):
-    """Main pipeline: fetch + classify + aggregate + insight narrative."""
+    """Main pipeline: LangGraph multi-agent analysis."""
     try:
         video_id = analysis.extract_video_id(req.url)
     except ValueError as exc:
@@ -77,69 +78,77 @@ async def analyze(req: AnalyzeRequest):
 
     try:
         state = await run_vibe_check_graph(video_id)
-        if "primary_analysis" not in state:
-            raise RuntimeError(f"LangGraph failed to produce primary analysis. Errors: {state.get('errors')}")
-
-        agg = state["primary_analysis"]
-        narrative = state.get("insight", "The AI narrative is temporarily unavailable.")
-        comments = state.get("primary_comments", [])
-
-        return {
-            "video_id": video_id,
-            "total_comments": agg["total"],
-            "failed_count": agg.get("failed_count", 0),
-            
-            "counts": agg["counts"],
-            "percentages": agg["percentages"],
-            "sentiment_counts": agg.get("sentiment_counts", {}),
-            "sentiment_percentages": agg.get("sentiment_percentages", {}),
-            "flag_counts": agg.get("flag_counts", {}),
-            "flag_percentages": agg.get("flag_percentages", {}),
-            
-            "vibe_score": agg["vibe_score"],
-            "top_comments": agg["top_comments"],
-            "narrative": narrative,
-            "raw_comments": comments,   # returned for Q&A agent frontend cache
-            "classified_comments": state.get("primary_classifications", []),
-            
-            "similar_video": state.get("similar_video"),
-            "similar_analysis": state.get("similar_analysis"),
-            "comparison": state.get("comparison"),
-            "errors": state.get("errors", [])
-        }
     except Exception as exc:
-        log.warning("LangGraph execution failed, falling back to linear analysis: %s", exc)
+        log.error("Graph execution failed: %s", exc)
+        raise HTTPException(500, f"Analysis failed: {exc}")
+
+    if "primary_analysis" not in state:
+        raise HTTPException(
+            500,
+            f"Primary analysis could not complete. Errors: {state.get('errors', [])}",
+        )
+
+    agg = state["primary_analysis"]
+    narrative = state.get("insight", "The AI narrative is temporarily unavailable.")
+    comments = state.get("primary_comments", [])
+
+    return {
+        "video_id": video_id,
+        "total_comments": agg.get("total", 0),
+        "failed_count": agg.get("failed_count", 0),
+        "counts": agg.get("counts", {}),
+        "percentages": agg.get("percentages", {}),
+        "sentiment_counts": agg.get("sentiment_counts", {}),
+        "sentiment_percentages": agg.get("sentiment_percentages", {}),
+        "flag_counts": agg.get("flag_counts", {}),
+        "flag_percentages": agg.get("flag_percentages", {}),
+        "vibe_score": agg.get("vibe_score", 0),
+        "top_comments": agg.get("top_comments", {}),
+        "narrative": narrative,  # top-level key, not nested
+        "raw_comments": comments,
+        "classified_comments": state.get("primary_classifications", []),
+        "similar_video": state.get("similar_video"),
+        "similar_analysis": state.get("similar_analysis"),
+        "comparison": state.get("comparison"),
+        "errors": state.get("errors", []),
+    }
+
+
+@app.get("/api/analyze/stream")
+async def analyze_stream(url: str):
+    """
+    SSE endpoint: streams agent-step names as the graph progresses.
+    Frontend listens and updates the stepper UI.
+    Events: fetching | classifying | aggregating | insight | similar_video | comparing | done
+    """
+    try:
+        video_id = analysis.extract_video_id(url)
+    except ValueError as exc:
+        async def _err():
+            yield f"data: {{\"error\": \"{exc}\"}}\n\n"
+        return StreamingResponse(_err(), media_type="text/event-stream")
+
+    from backend.graph import run_vibe_check_graph
+
+    queue: asyncio.Queue[str] = asyncio.Queue()
+
+    async def run():
         try:
-            comments = await analysis.fetch_comments(video_id)
-            classified = await analysis.classify_all(comments)
-            agg = analysis.aggregate_results(classified)
+            await run_vibe_check_graph(video_id, status_queue=queue)
+        finally:
+            await queue.put("done")
 
-            try:
-                narrative = await analysis.run_insight_agent(agg)
-            except Exception as e:
-                log.warning("Insight agent failed: %s", e)
-                narrative = "The AI narrative is temporarily unavailable."
+    asyncio.create_task(run())
 
-            return {
-                "video_id": video_id,
-                "total_comments": agg["total"],
-                "failed_count": agg.get("failed_count", 0),
-                "counts": agg["counts"],
-                "percentages": agg["percentages"],
-                "sentiment_counts": agg.get("sentiment_counts", {}),
-                "sentiment_percentages": agg.get("sentiment_percentages", {}),
-                "flag_counts": agg.get("flag_counts", {}),
-                "flag_percentages": agg.get("flag_percentages", {}),
-                "vibe_score": agg["vibe_score"],
-                "top_comments": agg["top_comments"],
-                "narrative": narrative,
-                "raw_comments": comments,
-                "classified_comments": classified,
-            }
-        except HTTPException:
-            raise
-        except Exception as fallback_exc:
-            raise HTTPException(500, f"Analysis failed: {fallback_exc}")
+    async def event_generator():
+        while True:
+            step = await queue.get()
+            yield f"data: {json.dumps({'step': step})}\n\n"
+            if step == "done":
+                break
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 
 @app.post("/api/qa")
 async def qa(req: QARequest):
@@ -166,7 +175,7 @@ async def health():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Static frontend — serve from /frontend/static
+# Static frontend
 # ──────────────────────────────────────────────────────────────────────────────
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
@@ -178,6 +187,7 @@ if os.path.isdir(FRONTEND_DIR):
         name="static",
     )
 
-    @app.get("/", include_in_schema=False)
-    async def serve_index():
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        """Serve index.html for all non-API paths (SPA routing)."""
         return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
