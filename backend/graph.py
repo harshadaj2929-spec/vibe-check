@@ -1,23 +1,68 @@
+"""
+Vibe Check — LangGraph orchestration (v2)
+-----------------------------------------
+Real StateGraph with:
+  - 6 named nodes
+  - Proper parallel fan-out after aggregate_node (insight + Agent-2 branch)
+  - Conditional edge: skip Agent-2 if no primary comments
+  - Graceful partial failure: every node catches its own errors
+  - In-memory cache keyed by video_id (TTL 10 min)
+  - Status events via asyncio.Queue for SSE streaming
+"""
+
+from __future__ import annotations
+
+import asyncio
 import json
+import logging
 import operator
-from typing import TypedDict, Annotated, Any
+import time
+from typing import Annotated, Any, Optional
+
 from langgraph.graph import StateGraph, START, END
+from typing_extensions import TypedDict
 
 from backend.analysis import (
     fetch_comments,
     classify_all,
     aggregate_results,
     run_insight_agent,
-    call_groq
+    call_groq,
 )
-from backend.services import analyze_similar_video
+from backend.services import find_similar_video, fetch_video_comments
 
+log = logging.getLogger("vibecheck.graph")
+
+# ---------------------------------------------------------------------------
+# In-memory result cache  (video_id → {result, ts})
+# ---------------------------------------------------------------------------
+_CACHE: dict[str, dict] = {}
+_CACHE_TTL = 600  # seconds
+
+
+def cache_get(video_id: str) -> Optional[dict]:
+    entry = _CACHE.get(video_id)
+    if entry and (time.time() - entry["ts"]) < _CACHE_TTL:
+        log.info("Cache hit for %s", video_id)
+        return entry["result"]
+    return None
+
+
+def cache_set(video_id: str, result: dict) -> None:
+    _CACHE[video_id] = {"result": result, "ts": time.time()}
+
+
+# ---------------------------------------------------------------------------
+# Shared typed state
+# ---------------------------------------------------------------------------
 class VibeCheckState(TypedDict, total=False):
     video_id: str
+    status_queue: Any  # asyncio.Queue[str] | None – for SSE
 
     primary_comments: list[str]
     primary_classifications: list[dict]
     primary_analysis: dict
+
     insight: str
 
     similar_video: dict
@@ -25,183 +70,294 @@ class VibeCheckState(TypedDict, total=False):
 
     comparison: dict
 
+    # Append-only list of non-fatal error messages
     errors: Annotated[list[str], operator.add]
 
-async def primary_analysis_node(state: VibeCheckState) -> dict:
-    video_id = state.get("video_id")
-    if not video_id:
-        return {"errors": ["No video_id provided"]}
-        
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+async def _emit(state: VibeCheckState, msg: str) -> None:
+    q: asyncio.Queue | None = state.get("status_queue")
+    if q is not None:
+        await q.put(msg)
+
+
+# ---------------------------------------------------------------------------
+# Node 1: fetch_comments_node
+# ---------------------------------------------------------------------------
+async def fetch_comments_node(state: VibeCheckState) -> dict:
+    video_id = state.get("video_id", "")
+    await _emit(state, "fetching")
     try:
         comments = await fetch_comments(video_id)
         if not comments:
             return {"errors": ["No comments found on primary video."]}
-            
-        classified = await classify_all(comments)
-        agg = aggregate_results(classified)
-        
-        return {
-            "primary_comments": comments,
-            "primary_classifications": classified,
-            "primary_analysis": agg
-        }
-    except Exception as e:
-        return {"errors": [f"Primary analysis failed: {str(e)}"]}
+        log.info("Fetched %d comments for %s", len(comments), video_id)
+        return {"primary_comments": comments}
+    except Exception as exc:
+        log.warning("fetch_comments_node error: %s", exc)
+        return {"errors": [f"Fetch failed: {exc}"]}
 
-async def insight_agent_node(state: VibeCheckState) -> dict:
+
+# ---------------------------------------------------------------------------
+# Node 2: classify_node  (Agent 1 — Deep Classifier)
+# ---------------------------------------------------------------------------
+async def classify_node(state: VibeCheckState) -> dict:
+    comments = state.get("primary_comments")
+    if not comments:
+        return {"errors": ["classify_node skipped: no comments."]}
+    await _emit(state, "classifying")
+    try:
+        classified = await classify_all(comments)
+        return {"primary_classifications": classified}
+    except Exception as exc:
+        log.warning("classify_node error: %s", exc)
+        return {"errors": [f"Classification failed: {exc}"]}
+
+
+# ---------------------------------------------------------------------------
+# Node 3: aggregate_node
+# ---------------------------------------------------------------------------
+async def aggregate_node(state: VibeCheckState) -> dict:
+    classified = state.get("primary_classifications")
+    if not classified:
+        return {"errors": ["aggregate_node skipped: no classifications."]}
+    await _emit(state, "aggregating")
+    try:
+        agg = aggregate_results(classified)
+        return {"primary_analysis": agg}
+    except Exception as exc:
+        log.warning("aggregate_node error: %s", exc)
+        return {"errors": [f"Aggregation failed: {exc}"]}
+
+
+# ---------------------------------------------------------------------------
+# Node 4: narrative_node  (Insight Agent)
+# ---------------------------------------------------------------------------
+async def narrative_node(state: VibeCheckState) -> dict:
     agg = state.get("primary_analysis")
     if not agg:
-        return {"errors": ["Insight Agent skipped: no primary analysis."]}
-        
+        return {"errors": ["narrative_node skipped: no primary analysis."]}
+    await _emit(state, "insight")
     try:
         narrative = await run_insight_agent(agg)
         return {"insight": narrative}
-    except Exception as e:
-        return {"errors": [f"Insight agent failed: {str(e)}"]}
+    except Exception as exc:
+        log.warning("narrative_node error: %s", exc)
+        return {
+            "insight": "AI narrative temporarily unavailable.",
+            "errors": [f"Insight agent failed: {exc}"],
+        }
 
-async def similar_video_node(state: VibeCheckState) -> dict:
-    video_id = state.get("video_id")
-    if not video_id:
-        return {"errors": ["Similar video skipped: no video_id."]}
-        
+
+# ---------------------------------------------------------------------------
+# Node 5a: find_similar_node  (start of Agent 2 branch)
+# ---------------------------------------------------------------------------
+async def find_similar_node(state: VibeCheckState) -> dict:
+    video_id = state.get("video_id", "")
+    await _emit(state, "similar_video")
     try:
-        res = await analyze_similar_video(video_id)
-        if res.get("status") == "success":
-            return {
-                "similar_video": res["similar_video"],
-                "similar_analysis": res["analysis"]
-            }
-        else:
-            return {"errors": [f"Similar video unavailable: {res.get('error')}"]}
-    except Exception as e:
-        return {"errors": [f"Similar video agent failed: {str(e)}"]}
+        res = await find_similar_video(video_id)
+        if res.get("status") != "success":
+            return {"errors": [f"Similar video: {res.get('error', 'not found')}"]}
+        return {"similar_video": res["similar_video"]}
+    except Exception as exc:
+        log.warning("find_similar_node error: %s", exc)
+        return {"errors": [f"find_similar failed: {exc}"]}
 
-async def comparison_node(state: VibeCheckState) -> dict:
+
+# ---------------------------------------------------------------------------
+# Node 5b: classify_similar_node  (fetch + reuse Agent 1)
+# ---------------------------------------------------------------------------
+async def classify_similar_node(state: VibeCheckState) -> dict:
+    sim = state.get("similar_video")
+    if not sim:
+        return {"errors": ["classify_similar skipped: no similar video."]}
+
+    sim_id = sim.get("video_id", "")
+    try:
+        # Fetch – cap at 25 comments, truncate to 300 chars each
+        cr = await fetch_video_comments(sim_id, max_comments=25)
+        if cr.get("status") != "success" or not cr.get("comments"):
+            return {"errors": [f"Similar video comments unavailable: {cr.get('error')}"]}
+
+        raw = [c[:300] for c in cr["comments"]]
+        classified = await classify_all(raw)
+        agg = aggregate_results(classified)
+
+        return {
+            "similar_analysis": {
+                "sentiment_counts": agg.get("sentiment_counts", {}),
+                "sentiment_percentages": agg.get("sentiment_percentages", {}),
+                "flag_counts": agg.get("flag_counts", {}),
+                "flag_percentages": agg.get("flag_percentages", {}),
+                "total": agg.get("total", 0),
+                "failed_count": agg.get("failed_count", 0),
+                "top_comments": agg.get("top_comments", {}),
+                "vibe_score": agg.get("vibe_score", 0),
+            }
+        }
+    except Exception as exc:
+        log.warning("classify_similar_node error: %s", exc)
+        return {"errors": [f"Similar classification failed: {exc}"]}
+
+
+# ---------------------------------------------------------------------------
+# Node 5c: compare_node  (Comparison Agent)
+# ---------------------------------------------------------------------------
+async def compare_node(state: VibeCheckState) -> dict:
+    await _emit(state, "comparing")
     primary = state.get("primary_analysis")
     similar = state.get("similar_analysis")
-    
+
     if not primary or not similar:
         return {
             "comparison": {
-                "summary": "Comparison unavailable because no sufficiently similar video was found or primary analysis failed.",
-                "status": "partial"
+                "status": "partial",
+                "summary": "Comparison unavailable — no similar video was found.",
+                "winner": None,
+                "reason": None,
+                "sentiment_comparison": None,
+                "vibe_comparison": None,
             }
         }
-        
-    if primary.get("total_comments", 0) == 0 or similar.get("total", 0) == 0:
-        return {
-            "comparison": {
-                "summary": "Comparison unavailable due to insufficient successfully classified comments.",
-                "status": "partial"
-            }
-        }
-        
-    # 1. Deterministic Calculation
-    p_sent = primary.get('sentiment_percentages', {})
-    s_sent = similar.get('sentiment_percentages', {})
-    
-    p_flag = primary.get('flag_percentages', {})
-    s_flag = similar.get('flag_percentages', {})
-    
-    p_vibe = primary.get('vibe_score', 0)
-    s_vibe = similar.get('vibe_score', 0)
-    
-    base_structure = {
+
+    p_sent = primary.get("sentiment_percentages", {})
+    s_sent = similar.get("sentiment_percentages", {})
+    p_flag = primary.get("flag_percentages", {})
+    s_flag = similar.get("flag_percentages", {})
+    p_vibe = primary.get("vibe_score", 0)
+    s_vibe = similar.get("vibe_score", 0)
+
+    base: dict[str, Any] = {
         "status": "success",
-        "sentiment_comparison": {
-            "primary": p_sent,
-            "similar": s_sent,
-            "difference": {
-                "positive": round(p_sent.get("positive", 0.0) - s_sent.get("positive", 0.0), 1),
-                "negative": round(p_sent.get("negative", 0.0) - s_sent.get("negative", 0.0), 1),
-                "neutral": round(p_sent.get("neutral", 0.0) - s_sent.get("neutral", 0.0), 1)
-            }
-        },
-        "safety_comparison": {
-            "primary": p_flag,
-            "similar": s_flag,
-            "difference": {
-                "hate": round(p_flag.get("hate", 0.0) - s_flag.get("hate", 0.0), 1),
-                "good": round(p_flag.get("good", 0.0) - s_flag.get("good", 0.0), 1),
-                "bad": round(p_flag.get("bad", 0.0) - s_flag.get("bad", 0.0), 1),
-                "none": round(p_flag.get("none", 0.0) - s_flag.get("none", 0.0), 1)
-            }
-        },
+        "sentiment_comparison": {"primary": p_sent, "similar": s_sent},
+        "safety_comparison": {"primary": p_flag, "similar": s_flag},
         "vibe_comparison": {
             "primary": p_vibe,
             "similar": s_vibe,
-            "difference": p_vibe - s_vibe
-        }
+            "difference": p_vibe - s_vibe,
+        },
     }
-    
-    # 2. LLM Call for narrative only
+
+    # LLM narrative
     system = (
         "You are Vibe Check's Comparison Analyzer. "
-        "Review the deterministically calculated sentiment and safety statistics comparing a primary YouTube video with a similar video. "
-        "Provide ONLY a valid JSON object with EXACTLY these three keys:\n"
-        "{\n"
-        '  "summary": "...",\n'
-        '  "winner": "primary",\n'
-        '  "reason": "..."\n'
-        "}\n"
-        "The summary should be 2-3 sentences. Winner must be 'primary', 'similar', or 'tie'. Reason is 1 short sentence."
+        "Given sentiment statistics for two YouTube videos, respond with ONLY valid JSON:\n"
+        '{"summary": "2-3 sentences comparing both videos", '
+        '"winner": "primary|similar|tie", '
+        '"reason": "one short sentence"}'
     )
-    
-    user = f"Primary Video vs Similar Video Stats:\n{json.dumps(base_structure, indent=2)}"
-    
+    user = f"Primary vs Similar:\n{json.dumps(base, indent=2)}"
+
     try:
-        resp_text = await call_groq([
-            {"role": "system", "content": system},
-            {"role": "user", "content": user}
-        ], max_tokens=1000)
-        
-        if "`json" in resp_text:
-            resp_text = resp_text.split("`json")[1].split("`")[0].strip()
-        elif "`" in resp_text:
-            resp_text = resp_text.split("`")[1].split("`")[0].strip()
-            
-        llm_data = json.loads(resp_text)
-        
-        # Merge LLM narrative into base deterministic structure
-        base_structure["summary"] = llm_data.get("summary", "Summary unavailable.")
-        base_structure["winner"] = llm_data.get("winner", "tie")
-        base_structure["reason"] = llm_data.get("reason", "")
-        
-    except Exception as e:
-        vibe_diff = base_structure["vibe_comparison"]["difference"]
-        fallback_winner = "tie"
-        if vibe_diff > 0:
-            fallback_winner = "primary"
-        elif vibe_diff < 0:
-            fallback_winner = "similar"
-            
-        base_structure["status"] = "partial"
-        base_structure["error"] = str(e)
-        base_structure["summary"] = "The primary and similar videos show different audience sentiment patterns. The comparison is based on successfully classified comments."
-        base_structure["winner"] = fallback_winner
-        base_structure["reason"] = "Deterministic fallback used due to AI rate limits."
-        
-    return {"comparison": base_structure}
+        raw = await call_groq(
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            max_tokens=400,
+        )
+        # Strip markdown fences if present
+        cleaned = raw.strip()
+        if "```" in cleaned:
+            cleaned = cleaned.split("```")[1]
+            if cleaned.startswith("json"):
+                cleaned = cleaned[4:]
+        llm = json.loads(cleaned)
+        base["summary"] = llm.get("summary", "")
+        base["winner"] = llm.get("winner", "tie")
+        base["reason"] = llm.get("reason", "")
+    except Exception as exc:
+        log.warning("compare_node LLM failed: %s — using deterministic fallback", exc)
+        diff = p_vibe - s_vibe
+        base["status"] = "partial"
+        base["winner"] = "primary" if diff > 0 else ("similar" if diff < 0 else "tie")
+        base["summary"] = (
+            "The primary and similar videos show different audience sentiment patterns."
+        )
+        base["reason"] = "Deterministic fallback used (AI rate-limited)."
+        base["errors"] = [str(exc)]
 
-def build_graph():
-    builder = StateGraph(VibeCheckState)
-    
-    builder.add_node("primary_analysis", primary_analysis_node)
-    builder.add_node("insight_agent", insight_agent_node)
-    builder.add_node("similar_video", similar_video_node)
-    builder.add_node("comparison", comparison_node)
-    
-    builder.add_edge(START, "primary_analysis")
-    builder.add_edge("primary_analysis", "insight_agent")
-    builder.add_edge("primary_analysis", "similar_video")
-    builder.add_edge("insight_agent", "comparison")
-    builder.add_edge("similar_video", "comparison")
-    builder.add_edge("comparison", END)
-    
-    return builder.compile()
+    return {"comparison": base}
 
-async def run_vibe_check_graph(video_id: str) -> dict:
-    graph = build_graph()
-    state = {"video_id": video_id}
-    final_state = await graph.ainvoke(state)
-    return final_state
+
+# ---------------------------------------------------------------------------
+# Conditional routing after fetch
+# ---------------------------------------------------------------------------
+def should_classify(state: VibeCheckState) -> str:
+    if state.get("primary_comments"):
+        return "classify"
+    return END  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
+# Build the graph
+# ---------------------------------------------------------------------------
+def build_graph() -> Any:
+    b = StateGraph(VibeCheckState)
+
+    b.add_node("fetch", fetch_comments_node)
+    b.add_node("classify", classify_node)
+    b.add_node("aggregate", aggregate_node)
+    b.add_node("narrative", narrative_node)
+    b.add_node("find_similar", find_similar_node)
+    b.add_node("classify_similar", classify_similar_node)
+    b.add_node("compare", compare_node)
+
+    b.add_edge(START, "fetch")
+
+    # Conditional: only classify if we have comments
+    b.add_conditional_edges("fetch", should_classify, {"classify": "classify", END: END})
+
+    b.add_edge("classify", "aggregate")
+
+    # Fan-out after aggregate: narrative + Agent-2 branch in parallel
+    b.add_edge("aggregate", "narrative")
+    b.add_edge("aggregate", "find_similar")
+
+    # Agent-2 sequential sub-chain
+    b.add_edge("find_similar", "classify_similar")
+    b.add_edge("classify_similar", "compare")
+
+    # Narrative also feeds compare (compare waits for both branches)
+    b.add_edge("narrative", "compare")
+
+    b.add_edge("compare", END)
+
+    return b.compile()
+
+
+# Singleton graph (built once)
+_GRAPH = None
+
+
+def get_graph():
+    global _GRAPH
+    if _GRAPH is None:
+        _GRAPH = build_graph()
+    return _GRAPH
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
+async def run_vibe_check_graph(
+    video_id: str,
+    status_queue: "asyncio.Queue[str] | None" = None,
+) -> dict:
+    cached = cache_get(video_id)
+    if cached:
+        if status_queue:
+            for step in ["fetching", "classifying", "aggregating", "insight", "similar_video", "comparing"]:
+                await status_queue.put(step)
+        return cached
+
+    graph = get_graph()
+    state: VibeCheckState = {"video_id": video_id}
+    if status_queue is not None:
+        state["status_queue"] = status_queue
+
+    final = await graph.ainvoke(state)
+    # Remove the queue from cached state
+    final.pop("status_queue", None)
+    cache_set(video_id, final)
+    return final
