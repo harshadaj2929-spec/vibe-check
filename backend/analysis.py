@@ -271,8 +271,10 @@ async def classify_all(comments: list[str]) -> list[dict]:
     ]
     log.info("Classifying %d comments in %d batches via Groq", len(comments), len(batches))
 
-    # Limit concurrent Groq calls to avoid rate limits
-    semaphore = asyncio.Semaphore(1)  # Reduced concurrency for reliability (Groq 429)
+    # Use the process-wide shared semaphore so classify_all, narrative, and
+    # compare_node never hit Groq simultaneously across parallel graph branches.
+    from backend.groq_limiter import groq_sem
+    semaphore = groq_sem()
     tasks = [classify_batch_groq(b, semaphore) for b in batches]
     batch_results = await asyncio.gather(*tasks)
 
@@ -351,29 +353,50 @@ def aggregate_results(classified: list[dict]) -> dict:
 
 
 async def call_groq(messages: list[dict], max_tokens: int = 500) -> str:
-    """Call Groq chat completions and return text content."""
+    """Call Groq chat completions and return text content. Retries on 429."""
+    import re as _re
     payload = {
         "model": GROQ_MODEL,
         "messages": messages,
         "max_tokens": max_tokens,
         "temperature": 0.7,
     }
-    resp = await http_client.post(
-        GROQ_URL,
-        headers={
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=30.0,
-    )
-    if resp.status_code == 429:
-        log.warning(f"Groq 429 limit hit. Body: {resp.text}")
-        raise HTTPException(429, "Groq rate limit hit. Please wait a moment and try again.")
-    if not resp.is_success:
-        log.error(f"Groq API error {resp.status_code}: {resp.text}")
-        resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"].strip()
+    for attempt in range(1, 3):  # max 2 attempts
+        resp = await http_client.post(
+            GROQ_URL,
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=30.0,
+        )
+        if resp.status_code == 429:
+            if attempt == 2:
+                log.warning("call_groq: 429 on final attempt — raising.")
+                raise HTTPException(429, "Groq rate limit hit. Please wait a moment and try again.")
+            wait_s = 15.0
+            ra = resp.headers.get("Retry-After")
+            if ra:
+                try:
+                    wait_s = float(ra) + 1.0
+                except Exception:
+                    pass
+            else:
+                try:
+                    m = _re.search(r'in ([0-9.]+)s', resp.json().get("error", {}).get("message", ""))
+                    if m:
+                        wait_s = float(m.group(1)) + 1.0
+                except Exception:
+                    pass
+            log.warning("call_groq: 429 hit, waiting %.1fs before retry %d.", wait_s, attempt + 1)
+            await asyncio.sleep(wait_s)
+            continue
+        if not resp.is_success:
+            log.error("Groq API error %s: %s", resp.status_code, resp.text)
+            resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"].strip()
+    raise HTTPException(429, "Groq rate limit hit after retries.")
 
 
 async def run_insight_agent(agg: dict) -> str:

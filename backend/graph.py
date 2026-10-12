@@ -33,6 +33,9 @@ from backend.services import find_similar_video, fetch_video_comments
 
 log = logging.getLogger("vibecheck.graph")
 
+# Shared Groq semaphore — defined in groq_limiter.py, shared with analysis.py
+from backend.groq_limiter import groq_sem as _groq_sem
+
 # ---------------------------------------------------------------------------
 # In-memory result cache  (video_id → {result, ts})
 # ---------------------------------------------------------------------------
@@ -141,7 +144,8 @@ async def narrative_node(state: VibeCheckState) -> dict:
         return {"errors": ["narrative_node skipped: no primary analysis."]}
     await _emit(state, "insight")
     try:
-        narrative = await run_insight_agent(agg)
+        async with _groq_sem():
+            narrative = await run_insight_agent(agg)
         return {"insight": narrative}
     except Exception as exc:
         log.warning("narrative_node error: %s", exc)
@@ -241,22 +245,25 @@ async def compare_node(state: VibeCheckState) -> dict:
         },
     }
 
-    # LLM narrative
+    # LLM narrative — tiny prompt: only the numbers, not raw JSON blob
     system = (
         "You are Vibe Check's Comparison Analyzer. "
-        "Given sentiment statistics for two YouTube videos, respond with ONLY valid JSON:\n"
-        '{"summary": "2-3 sentences comparing both videos", '
-        '"winner": "primary|similar|tie", '
-        '"reason": "one short sentence"}'
+        "Respond with ONLY valid JSON (no markdown):\n"
+        '{"summary":"2-3 sentences","winner":"primary|similar|tie","reason":"one sentence"}'
     )
-    user = f"Primary vs Similar:\n{json.dumps(base, indent=2)}"
+    user = (
+        f"Primary: pos={p_sent.get('positive',0)}% neu={p_sent.get('neutral',0)}% "
+        f"neg={p_sent.get('negative',0)}% hate={p_flag.get('hate',0)}% vibe={p_vibe}\n"
+        f"Similar: pos={s_sent.get('positive',0)}% neu={s_sent.get('neutral',0)}% "
+        f"neg={s_sent.get('negative',0)}% hate={s_flag.get('hate',0)}% vibe={s_vibe}"
+    )
 
     try:
-        raw = await call_groq(
-            [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            max_tokens=400,
-        )
-        # Strip markdown fences if present
+        async with _groq_sem():
+            raw = await call_groq(
+                [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                max_tokens=200,
+            )
         cleaned = raw.strip()
         if "```" in cleaned:
             cleaned = cleaned.split("```")[1]
@@ -264,18 +271,18 @@ async def compare_node(state: VibeCheckState) -> dict:
                 cleaned = cleaned[4:]
         llm = json.loads(cleaned)
         base["summary"] = llm.get("summary", "")
-        base["winner"] = llm.get("winner", "tie")
-        base["reason"] = llm.get("reason", "")
+        base["winner"]  = llm.get("winner", "tie")
+        base["reason"]  = llm.get("reason", "")
     except Exception as exc:
         log.warning("compare_node LLM failed: %s — using deterministic fallback", exc)
         diff = p_vibe - s_vibe
-        base["status"] = "partial"
-        base["winner"] = "primary" if diff > 0 else ("similar" if diff < 0 else "tie")
+        base["status"]  = "partial"
+        base["winner"]  = "primary" if diff > 0 else ("similar" if diff < 0 else "tie")
         base["summary"] = (
             "The primary and similar videos show different audience sentiment patterns."
         )
-        base["reason"] = "Deterministic fallback used (AI rate-limited)."
-        base["errors"] = [str(exc)]
+        base["reason"]  = "Deterministic fallback used (AI rate-limited)."
+        base["errors"]  = [str(exc)]
 
     return {"comparison": base}
 

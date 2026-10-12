@@ -58,6 +58,7 @@ function clearError() { $('errorToast').hidden = true; }
 
 // ── SPA Router ────────────────────────────────────────────────────────────────
 function navigate() {
+  clearError();  // dismiss any stale error from a previous session/navigation
   const hash = window.location.hash || '#/home';
   document.querySelectorAll('.page-view').forEach(p => { p.hidden = true; });
   document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
