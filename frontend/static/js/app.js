@@ -122,51 +122,54 @@ function countUp(el, target, suffix = '%', dur = 800) {
 function populateHomeData(data) {
   $('home-results').hidden = false;
 
-  // Vibe score + needle
+  // Vibe score + needle + arc fill
   const score = data.vibe_score || 0;
-  $('vibeScoreLabel').textContent = score;
-  $('arcScoreBadge').textContent  = score;
-  const needleAngle = (score / 100) * 180;
-  $('arcNeedle').setAttribute('transform', `rotate(${needleAngle}, 130, 130)`);
-
-  // Equaliser bars
-  const eq = $('eqContainer');
-  eq.innerHTML = '';
-  for (let i = 0; i < 20; i++) {
-    const bar = document.createElement('div');
-    bar.className = 'eq-bar';
-    const h = 20 + Math.random() * 60;
-    const t = i / 19;
-    const r = Math.round(255 * (1 - t));
-    const g = Math.round(77 + t * 153);
-    const b = Math.round(77 + t * 41);
-    bar.style.cssText = `height:${h}%;background:rgb(${r},${g},${b});animation-delay:${(Math.random()*0.5).toFixed(2)}s`;
-    eq.appendChild(bar);
+  $('vibeScoreLabel').textContent = '/ 100';
+  countUp($('arcScoreBadge'), score, '', 800);
+  // Arc: semi-circle path length ~314; offset = 314 - (score/100)*314
+  const arcEl = $('arcFill');
+  if (arcEl) {
+    const filled = (score / 100) * 314;
+    arcEl.style.strokeDashoffset = String(314 - filled);
   }
+  // Needle: rotate from -90deg (0) to +90deg (100) around pivot 130,155
+  const needleAngle = -90 + (score / 100) * 180;
+  const needleEl = $('arcNeedle');
+  if (needleEl) needleEl.setAttribute('transform', `rotate(${needleAngle},130,155)`);
 
-  // Sentiment
+  // Stacked sentiment bar (new design — replaces EQ bars)
   const sp = data.sentiment_percentages || {};
   const sc = data.sentiment_counts || {};
-  countUp($('statPos'), sp.positive || 0);
-  countUp($('statNeu'), sp.neutral  || 0);
-  countUp($('statNeg'), sp.negative || 0);
+  const posW = sp.positive || 0, neuW = sp.neutral || 0, negW = sp.negative || 0;
+  const barPos = $('statPos'), barNeu = $('statNeu'), barNeg = $('statNeg');
+  if (barPos) { barPos.style.width = posW + '%'; }
+  if (barNeu) { barNeu.style.width = neuW + '%'; }
+  if (barNeg) { barNeg.style.width = negW + '%'; }
+
+  // Legend percentages
+  const posLegend = document.querySelector('.pos-pct');
+  const neuLegend = document.querySelector('.neu-pct');
+  const negLegend = document.querySelector('.neg-pct');
+  if (posLegend) countUp(posLegend, posW);
+  if (neuLegend) countUp(neuLegend, neuW);
+  if (negLegend) countUp(negLegend, negW);
   $('statPosCount').textContent = (sc.positive || 0) + ' comments';
   $('statNeuCount').textContent = (sc.neutral  || 0) + ' comments';
   $('statNegCount').textContent = (sc.negative || 0) + ' comments';
 
-  // Safety
+  // Safety chips
   const fp = data.flag_percentages || {};
   const fc = data.flag_counts || {};
-  $('statHate').textContent = (fp.hate || 0) + '%';
-  $('statGood').textContent = (fp.good || 0) + '%';
-  $('statBad' ).textContent = (fp.bad  || 0) + '%';
-  $('statNone').textContent = (fp.none || 0) + '%';
-  $('statHateCount').textContent = (fc.hate || 0) + ' comments';
-  $('statGoodCount').textContent = (fc.good || 0) + ' comments';
-  $('statBadCount' ).textContent = (fc.bad  || 0) + ' comments';
-  $('statNoneCount').textContent = (fc.none || 0) + ' comments';
+  const sh = $('statHate'), sg = $('statGood'), sn = $('statNone');
+  if (sh) sh.textContent = (fp.hate || 0) + '%';
+  if (sg) sg.textContent = (fp.good || 0) + '%';
+  if (sn) sn.textContent = (fp.none || 0) + '%';
+  const shc = $('statHateCount'), sgc = $('statGoodCount'), snc = $('statNoneCount');
+  if (shc) shc.textContent = (fc.hate || 0) + ' comments';
+  if (sgc) sgc.textContent = (fc.good || 0) + ' comments';
+  if (snc) snc.textContent = (fc.none || 0) + ' comments';
 
-  // Narrative (backend returns top-level `narrative`, not nested)
+  // Narrative
   $('narrativeText').textContent = data.narrative || 'Narrative not available.';
 
   // Quick comparison card
@@ -203,9 +206,52 @@ function renderSimilarPage(data) {
   $('svTitle').textContent   = sv.title;
   $('svChannel').textContent = sv.channel_title || '—';
   $('svScore').textContent   = sv.score != null ? sv.score.toFixed(3) : '—';
-  const link = $('svLink');
-  link.href = `https://www.youtube.com/watch?v=${sv.video_id}`;
 
+  // Thumbnail
+  const thumbImg  = $('svThumb');
+  const thumbArea = $('thumbArea');
+  const vidId     = sv.video_id || '';
+  const thumbUrl  = sv.thumbnail_url || `https://i.ytimg.com/vi/${vidId}/hqdefault.jpg`;
+  if (thumbImg) {
+    thumbImg.src = thumbUrl;
+    thumbImg.alt = sv.title || 'Similar video thumbnail';
+    thumbImg.onerror = () => { thumbImg.src = `https://i.ytimg.com/vi/${vidId}/hqdefault.jpg`; };
+  }
+
+  // YouTube link
+  const ytUrl = sv.url || `https://www.youtube.com/watch?v=${vidId}`;
+  const link = $('svLink');
+  if (link) link.href = ytUrl;
+
+  // thumbPlayBtn → open YouTube in new tab (removes duplicate listeners via clone)
+  const playBtn = $('thumbPlayBtn');
+  if (playBtn && vidId) {
+    const fresh = playBtn.cloneNode(true);
+    playBtn.parentNode.replaceChild(fresh, playBtn);
+    fresh.addEventListener('click', () => window.open(ytUrl, '_blank', 'noopener,noreferrer'));
+  }
+
+  // svEmbedBtn → swap thumbnail for nocookie iframe (once, guards against re-render)
+  const embedBtn = $('svEmbedBtn');
+  if (embedBtn && vidId && thumbArea) {
+    const fresh2 = embedBtn.cloneNode(true);
+    embedBtn.parentNode.replaceChild(fresh2, embedBtn);
+    fresh2.addEventListener('click', () => {
+      if (thumbArea.querySelector('iframe')) return; // already embedded
+      const iframe = document.createElement('iframe');
+      iframe.src    = `https://www.youtube-nocookie.com/embed/${vidId}?autoplay=1&rel=0`;
+      iframe.allow  = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+      iframe.allowFullscreen = true;
+      iframe.style.cssText   = 'position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:8px;';
+      // Replace thumb + overlay with iframe
+      thumbArea.innerHTML = '';
+      thumbArea.style.position = 'relative';
+      thumbArea.appendChild(iframe);
+      fresh2.hidden = true;
+    });
+  }
+
+  // Similar video analysis stats
   const sa = data.similar_analysis;
   if (sa) {
     const sp2 = sa.sentiment_percentages || {};
@@ -221,6 +267,7 @@ function renderSimilarPage(data) {
     $('svTotalCount').textContent = sa.total || 0;
   }
 }
+
 
 // ── Comparison page ───────────────────────────────────────────────────────────
 function renderComparisonPage(data) {
@@ -248,23 +295,28 @@ function renderComparisonPage(data) {
   $('compWinner').textContent  = c.winner || '—';
   $('compSummary').textContent = c.summary || '';
   $('compReason').textContent  = c.reason  || '';
-  $('compStatusBadge').textContent = c.status === 'partial' ? '⚡ deterministic fallback' : '✓ AI narrative';
+  $('compStatusBadge').textContent = c.status === 'partial' ? 'deterministic fallback' : 'AI narrative';
 }
 
 // ── Agent stepper ─────────────────────────────────────────────────────────────
+const CHECK_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" style="width:12px;height:12px;vertical-align:middle"><path d="M3 8l3.5 3.5L13 4"/></svg>';
+const SPIN_SVG  = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;vertical-align:middle;animation:pip-spin .8s linear infinite"><circle cx="8" cy="8" r="6" stroke-dasharray="25" stroke-dashoffset="10"/></svg>';
+
 function stepperSet(step, state) {
-  // state: 'active' | 'done'
   const el = $(`step-${step}`);
   if (!el) return;
   el.classList.remove('active', 'done');
   el.classList.add(state);
-  const statusEl = el.querySelector('.step-status');
-  if (statusEl) statusEl.textContent = state === 'active' ? '…' : '✓';
+  const statusEl = el.querySelector('.pip-status');
+  if (statusEl) statusEl.innerHTML = state === 'active' ? SPIN_SVG : (state === 'done' ? CHECK_SVG : '');
 }
 function stepperReset() {
   STEPS.forEach(s => {
     const el = $(`step-${s}`);
-    if (el) { el.classList.remove('active','done'); el.querySelector('.step-status').textContent = ''; }
+    if (!el) return;
+    el.classList.remove('active', 'done');
+    const statusEl = el.querySelector('.pip-status');
+    if (statusEl) statusEl.innerHTML = '';
   });
 }
 
@@ -410,8 +462,10 @@ document.querySelectorAll('.filter-sentiment-btn').forEach(btn => {
 });
 
 // ── Categorized comments renderer ─────────────────────────────────────────────
-const FLAG_ICONS  = { hate: '🔴', good: '🟢', bad: '🟠', none: '⚪' };
-const FLAG_COLORS = { hate: 'var(--neg)', good: 'var(--pos)', bad: 'orange', none: 'var(--muted)' };
+const FLAG_LABELS = { hate: 'Hate', good: 'Good', bad: 'Spam', none: 'Neutral' };
+const FLAG_ACCENT = { hate: 'accent-hate', good: 'accent-good', bad: 'accent-bad', none: 'accent-none' };
+const SENT_BADGE  = { positive: 'badge-sent-pos', neutral: 'badge-sent-neu', negative: 'badge-sent-neg' };
+const FLAG_BADGE  = { hate: 'badge-flag-hate', good: 'badge-flag-good', bad: 'badge-flag-bad', none: 'badge-flag-none' };
 
 function renderCategorizedComments(data, updateCounts = true) {
   if (!data || !data.classified_comments) return;
@@ -419,80 +473,136 @@ function renderCategorizedComments(data, updateCounts = true) {
 
   if (updateCounts) {
     const fc = data.flag_counts || {};
-    $('count-all' ).textContent = comments.filter(c => c.status === 'success').length;
-    $('count-hate').textContent = fc.hate || 0;
-    $('count-good').textContent = fc.good || 0;
-    $('count-bad' ).textContent = fc.bad  || 0;
-    $('count-none').textContent = fc.none || 0;
+    const cAll  = $('count-all');
+    const cHate = $('count-hate');
+    const cGood = $('count-good');
+    const cNone = $('count-none');
+    if (cAll)  cAll.textContent  = comments.filter(c => c.status === 'success').length;
+    if (cHate) cHate.textContent = fc.hate || 0;
+    if (cGood) cGood.textContent = fc.good || 0;
+    if (cNone) cNone.textContent = fc.none || 0;
   }
 
   const container = $('categorized-comments-container');
-  const filtered  = comments.filter(c => {
+  if (!container) return;
+
+  const filtered = comments.filter(c => {
     if (c.status !== 'success') return false;
-    const mFlag = activeFlagFilter === 'all' || c.flag === activeFlagFilter;
+    const mFlag = activeFlagFilter     === 'all' || c.flag      === activeFlagFilter;
     const mSent = activeSentimentFilter === 'all' || c.sentiment === activeSentimentFilter;
     return mFlag && mSent;
   });
 
-  // Header
-  const HEADERS = {
-    all:  { icon: '',   label: 'ALL COMMENTS',            desc: 'All successfully classified comments.' },
-    hate: { icon: '🔴', label: 'HATED COMMENTS',          desc: 'Comments containing targeted harassment, abuse, threats, slurs, or hateful content.' },
-    good: { icon: '🟢', label: 'GOOD COMMENTS',           desc: 'Meaningful praise, constructive criticism, useful discussion, substantive feedback.' },
-    bad:  { icon: '🟠', label: 'BAD COMMENTS',            desc: 'Low-quality, spam, promotional, or irrelevant content.' },
-    none: { icon: '⚪', label: 'NEUTRAL / OTHER',         desc: 'Standard comments that do not trigger safety flags.' },
-  };
-  const h = HEADERS[activeFlagFilter] || HEADERS.all;
-  const color = FLAG_COLORS[activeFlagFilter] || 'var(--fg)';
+  container.innerHTML = '';
 
-  let html = `<div style="margin-bottom:1.5rem;">
-    <h3 style="color:${color};">${h.icon} ${h.label}</h3>
-    <p style="color:var(--muted); font-size:0.9rem;">${h.desc}</p>
-  </div>`;
+  // Section heading
+  const SECTION_LABELS = {
+    all:  'All Comments', hate: 'Hateful Comments',
+    good: 'Good Comments', bad: 'Spam / Low Quality', none: 'Neutral / Other',
+  };
+  const heading = document.createElement('div');
+  heading.className = 'cat-section';
+  const h3 = document.createElement('h3');
+  h3.className = 'cat-heading';
+  const dot = document.createElement('span');
+  dot.className = 'cat-dot';
+  dot.style.background = {
+    all:'#9CA3AF', hate:'#B42318', good:'#2F9E6E', bad:'#F59E0B', none:'#8A94A6'
+  }[activeFlagFilter] || '#9CA3AF';
+  h3.appendChild(dot);
+  h3.appendChild(document.createTextNode(SECTION_LABELS[activeFlagFilter] || 'Comments'));
+  heading.appendChild(h3);
+  container.appendChild(heading);
 
   if (filtered.length === 0) {
-    const emptyMsg = (activeFlagFilter === 'hate' && activeSentimentFilter === 'all')
-      ? 'No hateful comments detected — a great sign!'
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = activeFlagFilter === 'hate'
+      ? 'No hateful comments detected — great sign!'
       : 'No comments match the selected filters.';
-    html += `<div class="empty-category">${emptyMsg}</div>`;
-    container.innerHTML = html;
+    container.appendChild(empty);
     return;
   }
 
-  container.innerHTML = html;
+  const list = document.createElement('div');
+  list.className = 'comment-list';
 
   filtered.forEach((c, idx) => {
-    const card     = document.createElement('div');
-    const flagKey  = c.flag || 'none';
-    const sentKey  = c.sentiment || 'neutral';
-    card.className = `cat-comment-card flag-${flagKey} sent-${sentKey}`;
+    const flagKey = c.flag      || 'none';
+    const sentKey = c.sentiment || 'neutral';
 
-    const flagStr = flagKey.charAt(0).toUpperCase() + flagKey.slice(1);
-    const sentStr = sentKey.charAt(0).toUpperCase() + sentKey.slice(1);
-    const icon    = FLAG_ICONS[flagKey] || '⚪';
-    const fColor  = FLAG_COLORS[flagKey] || 'var(--muted)';
+    // Card
+    const card = document.createElement('div');
+    card.className = 'comment-item';
 
-    let inner = `<div class="cat-comment-text">"${escHtml(c.text)}"</div>
-      <div class="cat-comment-meta">
-        <span class="sent-badge sent-badge-${sentKey}">${sentStr}</span>
-        <span class="flag-badge" style="color:${fColor};">${icon} ${flagStr}</span>
-      </div>`;
+    // Accent bar
+    const accent = document.createElement('div');
+    accent.className = `comment-accent ${FLAG_ACCENT[flagKey] || 'accent-none'}`;
+    card.appendChild(accent);
 
-    if (c.mixed || c.evidence?.length || c.reason) {
-      const detId = `det-${idx}`;
-      inner += `<button class="cat-comment-details-toggle" onclick="document.getElementById('${detId}').hidden=!document.getElementById('${detId}').hidden">View classification details</button>
-        <div class="cat-comment-details" id="${detId}" hidden>
-          ${c.mixed !== undefined ? `<p><strong>Mixed:</strong> ${c.mixed ? 'Yes' : 'No'}</p>` : ''}
-          ${c.confidence ? `<p><strong>Confidence:</strong> ${c.confidence}</p>` : ''}
-          ${c.evidence?.length ? `<p><strong>Evidence:</strong> ${escHtml(c.evidence.join(' '))}</p>` : ''}
-          ${c.reason ? `<p><strong>Reason:</strong> ${escHtml(c.reason)}</p>` : ''}
-        </div>`;
+    // Body
+    const body = document.createElement('div');
+    body.className = 'comment-body';
+
+    // Text (XSS-safe: textContent only)
+    const txt = document.createElement('p');
+    txt.className = 'comment-text';
+    txt.textContent = c.text || '';
+    body.appendChild(txt);
+
+    // Badges
+    const badges = document.createElement('div');
+    badges.className = 'comment-badges';
+
+    const sentBadge = document.createElement('span');
+    sentBadge.className = `badge ${SENT_BADGE[sentKey] || 'badge-sent-neu'}`;
+    sentBadge.textContent = sentKey.charAt(0).toUpperCase() + sentKey.slice(1);
+    badges.appendChild(sentBadge);
+
+    const flagBadge = document.createElement('span');
+    flagBadge.className = `badge ${FLAG_BADGE[flagKey] || 'badge-flag-none'}`;
+    flagBadge.textContent = FLAG_LABELS[flagKey] || flagKey;
+    badges.appendChild(flagBadge);
+
+    if (c.mixed) {
+      const mixBadge = document.createElement('span');
+      mixBadge.className = 'badge badge-sent-neu';
+      mixBadge.textContent = 'Mixed';
+      badges.appendChild(mixBadge);
+    }
+    body.appendChild(badges);
+
+    // Classification detail toggle (confidence, reason) — no HTML injection
+    if (c.reason || c.confidence) {
+      const toggle = document.createElement('button');
+      toggle.className = 'cat-comment-details-toggle';
+      toggle.style.cssText = 'background:none;border:none;font-size:11px;color:var(--txt-m);cursor:pointer;padding:4px 0;text-align:left;';
+      toggle.textContent = 'View details';
+      const detail = document.createElement('div');
+      detail.hidden = true;
+      detail.style.cssText = 'font-size:11px;color:var(--txt-2);margin-top:4px;line-height:1.5;';
+      if (c.confidence) {
+        const cp = document.createElement('p');
+        cp.textContent = `Confidence: ${c.confidence}`;
+        detail.appendChild(cp);
+      }
+      if (c.reason) {
+        const rp = document.createElement('p');
+        rp.textContent = `Reason: ${c.reason}`;
+        detail.appendChild(rp);
+      }
+      toggle.addEventListener('click', () => { detail.hidden = !detail.hidden; });
+      body.appendChild(toggle);
+      body.appendChild(detail);
     }
 
-    card.innerHTML = inner;
-    container.appendChild(card);
+    card.appendChild(body);
+    list.appendChild(card);
   });
+
+  container.appendChild(list);
 }
+
 
 function escHtml(str) {
   return String(str)
