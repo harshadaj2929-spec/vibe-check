@@ -1,0 +1,13 @@
+VibeCheck — Image Credits
+========================================
+
+hero.webp: "Abstract data analytics dashboard on a laptop screen" by Luke Chesser | https://unsplash.com/photos/1551288049-bebda4e38f71 | Unsplash License
+hiw1.webp: "Person typing a URL on a laptop keyboard" by Carlos Muza | https://unsplash.com/photos/1460925895917-afdab827c52f | Unsplash License
+hiw2.webp: "Abstract AI neural network visualization" by Google DeepMind | https://unsplash.com/photos/1677442135703-1787eea5ce01 | Unsplash License
+hiw3.webp: "Bar chart analytics on a screen showing insights" by Isaac Smith | https://unsplash.com/photos/1543286386-2e659306cd6c | Unsplash License
+ask.webp: "Two speech bubbles representing a conversation" by Volodymyr Hryshchenko | https://unsplash.com/photos/1516321318423-f06f85e504b3 | Unsplash License
+
+All images are from Unsplash (https://unsplash.com).
+Unsplash License: https://unsplash.com/license
+Free to use for commercial and non-commercial purposes.
+Attribution appreciated but not required.

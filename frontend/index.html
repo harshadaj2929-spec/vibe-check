@@ -4,448 +4,662 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>VibeCheck — YouTube Comment Intelligence</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='6' y='8' width='20' height='16' rx='4' fill='%234F46E5'/><circle cx='12' cy='16' r='2' fill='white'/><circle cx='20' cy='16' r='2' fill='white'/><rect x='14' y='4' width='4' height='5' rx='2' fill='%234F46E5'/><circle cx='16' cy='4' r='2' fill='%236366F1'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='4' y='6' width='24' height='20' rx='5' fill='%230F0F0F'/><rect x='10' y='12' width='12' height='2' rx='1' fill='white'/><rect x='10' y='17' width='8' height='2' rx='1' fill='white'/><circle cx='25' cy='8' r='4' fill='%23FF0000'/></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 <body>
 
-<!-- ── COLD-START BANNER ───────────────────────────────────────────────── -->
+<!-- Top progress bar -->
+<div id="topProgressBar"></div>
+
+<!-- ── COLD-START BANNER ─────────────────────────────────── -->
 <div id="coldStartBanner" class="cold-banner" hidden>
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
   <span>Server is waking up — this takes about 30 seconds on the free tier</span>
   <div class="cold-track"><div id="coldBar" class="cold-fill"></div></div>
 </div>
 
-<!-- ── SITE HEADER / NAV ──────────────────────────────────────────────── -->
-<header class="site-header">
-  <div class="container header-inner">
-    <a href="#/home" class="logo-link">
-      <!-- Robot mascot (small) -->
-      <svg class="logo-robot" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="8" y="14" width="24" height="20" rx="6" fill="#4F46E5"/>
-        <circle cx="15" cy="24" r="3" fill="white" opacity=".9"/>
-        <circle cx="25" cy="24" r="3" fill="white" opacity=".9"/>
-        <circle cx="15" cy="24" r="1.2" fill="#4F46E5" class="eye-pupil"/>
-        <circle cx="25" cy="24" r="1.2" fill="#4F46E5" class="eye-pupil"/>
-        <rect x="18" y="8" width="4" height="7" rx="2" fill="#818CF8"/>
-        <circle cx="20" cy="7" r="2.5" fill="#6366F1"/>
-        <rect x="14" y="34" width="4" height="2" rx="1" fill="#6366F1"/>
-        <rect x="22" y="34" width="4" height="2" rx="1" fill="#6366F1"/>
-      </svg>
-      <span class="logo-text">VibeCheck</span>
-    </a>
-    <nav class="site-nav" role="navigation">
-      <a href="#/home"         class="nav-link" data-page="home">Home</a>
-      <a href="#/comments"     class="nav-link" data-page="comments">Comments</a>
-      <a href="#/similar-video" class="nav-link" data-page="similar">Similar Video</a>
-      <a href="#/comparison"   class="nav-link" data-page="comparison">Comparison</a>
-      <a href="#/ask-comments" class="nav-link" data-page="ask">Ask Comments</a>
-    </nav>
-  </div>
-</header>
+<div class="app-shell">
 
-<!-- ── MAIN CONTENT ───────────────────────────────────────────────────── -->
-<main class="main-wrap">
-<div class="container">
+<!-- ── HEADER ───────────────────────────────────────────── -->
+<header class="site-header" role="banner">
+  <button class="header-menu-btn" id="sidebarToggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
 
-<!-- ══════════════════════════════════════════════════════════════════════
-     PAGE: HOME
-════════════════════════════════════════════════════════════════════════ -->
-<section id="page-home" class="page-view" hidden>
-
-  <!-- Hero -->
-  <div class="hero">
-    <!-- Large robot mascot -->
-    <svg id="heroRobot" class="hero-robot" viewBox="0 0 120 140" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <!-- Antenna -->
-      <rect x="56" y="4" width="8" height="22" rx="4" fill="#818CF8"/>
-      <circle cx="60" cy="4" r="7" fill="#6366F1"/>
-      <!-- Body -->
-      <rect x="14" y="26" width="92" height="78" rx="18" fill="#4F46E5"/>
-      <!-- Eyes -->
-      <circle cx="43" cy="65" r="12" fill="white" opacity=".95"/>
-      <circle cx="77" cy="65" r="12" fill="white" opacity=".95"/>
-      <circle class="eye-pupil" cx="43" cy="65" r="5" fill="#312E81"/>
-      <circle class="eye-pupil" cx="77" cy="65" r="5" fill="#312E81"/>
-      <circle cx="45" cy="62" r="2" fill="white" opacity=".6"/>
-      <circle cx="79" cy="62" r="2" fill="white" opacity=".6"/>
-      <!-- Mouth panel -->
-      <rect x="36" y="84" width="48" height="10" rx="5" fill="#3730A3"/>
-      <rect x="42" y="87" width="8" height="4" rx="2" fill="#818CF8"/>
-      <rect x="56" y="87" width="8" height="4" rx="2" fill="#818CF8"/>
-      <rect x="70" y="87" width="8" height="4" rx="2" fill="#818CF8"/>
-      <!-- Legs -->
-      <rect x="30" y="104" width="16" height="8" rx="4" fill="#6366F1"/>
-      <rect x="74" y="104" width="16" height="8" rx="4" fill="#6366F1"/>
-      <!-- Arms -->
-      <rect x="2" y="36" width="12" height="40" rx="6" fill="#6366F1"/>
-      <rect x="106" y="36" width="12" height="40" rx="6" fill="#6366F1"/>
+  <!-- Logo -->
+  <a href="#/home" class="logo-link" aria-label="VibeCheck home">
+    <!-- Pulse/waveform logo mark -->
+    <svg class="logo-mark" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="28" height="28" rx="6" fill="#0F0F0F"/>
+      <path d="M4 14h2l2-5 3 10 3-12 3 10 2-5 2 2h3" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <circle cx="23" cy="6" r="3" fill="#FF0000"/>
     </svg>
+    <span class="logo-word">VibeCheck</span>
+  </a>
 
-    <div class="hero-text">
-      <h1 class="hero-headline">What's the vibe?</h1>
-      <p class="hero-sub">Drop any YouTube URL. Our multi-agent AI reads the comments so you don't have to.</p>
-
-      <form id="analyzeForm" class="search-form">
-        <div class="search-box">
-          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
-          <input id="urlInput" type="url" class="search-input"
-            placeholder="youtube.com/watch?v=...  or  youtu.be/..."
-            autocomplete="off" spellcheck="false" />
-        </div>
-        <button id="analyzeBtn" type="submit" class="btn btn-primary">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>
-          Check Vibe
-        </button>
-      </form>
-      <p class="hero-hint">Supports youtube.com/watch?v=, Shorts, and bare IDs</p>
-    </div>
+  <!-- Center search pill (desktop) -->
+  <div class="header-search" role="search">
+    <input class="header-search-input" id="urlInput" type="url"
+      placeholder="Paste a YouTube link"
+      autocomplete="off" spellcheck="false" aria-label="YouTube video URL" />
+    <button class="header-search-btn" id="analyzeBtn" aria-label="Analyze video"
+      form="analyzeForm" type="submit">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    </button>
   </div>
 
-  <!-- Pipeline stepper -->
-  <div id="agentStepper" class="pipeline" hidden>
-    <div id="step-fetching"      class="pip-step"><span class="pip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-4.584-6.953M3 15l3-3m-3 3l3 3"/></svg></span><span class="pip-label">Fetching</span><span class="pip-status"></span></div>
-    <div class="pip-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18l6-6-6-6"/></svg></div>
-    <div id="step-classifying"   class="pip-step"><span class="pip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6z"/></svg></span><span class="pip-label">Classifying</span><span class="pip-status"></span></div>
-    <div class="pip-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18l6-6-6-6"/></svg></div>
-    <div id="step-aggregating"   class="pip-step"><span class="pip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg></span><span class="pip-label">Aggregating</span><span class="pip-status"></span></div>
-    <div class="pip-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18l6-6-6-6"/></svg></div>
-    <div id="step-insight"       class="pip-step"><span class="pip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18"/></svg></span><span class="pip-label">Insight Agent</span><span class="pip-status"></span></div>
-    <div class="pip-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18l6-6-6-6"/></svg></div>
-    <div id="step-similar_video" class="pip-step"><span class="pip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803 7.5 7.5 0 0016.803 15.803z"/></svg></span><span class="pip-label">Similar Video</span><span class="pip-status"></span></div>
-    <div class="pip-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18l6-6-6-6"/></svg></div>
-    <div id="step-comparing"     class="pip-step"><span class="pip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/></svg></span><span class="pip-label">Comparing</span><span class="pip-status"></span></div>
-  </div>
+  <!-- Mobile search icon -->
+  <button class="header-search-icon-btn" aria-label="Search">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+  </button>
 
-  <!-- Skeleton loader -->
-  <div id="homeSkeleton" class="skeleton-wrap" hidden>
-    <div class="skel-row">
-      <div class="skel-block skel-gauge"></div>
-      <div class="skel-block skel-bars"></div>
-    </div>
-    <div class="skel-block skel-narr"></div>
-  </div>
+  <!-- Hidden form wrapper so submit event fires -->
+  <form id="analyzeForm" style="display:none;" aria-hidden="true"></form>
 
-  <!-- Results -->
-  <div id="home-results" hidden>
-
-    <!-- Overview card -->
-    <div class="card results-overview fade-up">
-      <div class="overview-left">
-        <!-- Gauge -->
-        <div class="gauge-wrap">
-          <svg class="gauge-svg" viewBox="0 0 260 160" aria-hidden="true">
-            <defs>
-              <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%"   stop-color="#D6564E"/>
-                <stop offset="50%"  stop-color="#F59E0B"/>
-                <stop offset="100%" stop-color="#2F9E6E"/>
-              </linearGradient>
-            </defs>
-            <!-- Track arc -->
-            <path d="M 30 155 A 100 100 0 0 1 230 155" fill="none" stroke="#E5E7EB" stroke-width="14" stroke-linecap="round"/>
-            <!-- Fill arc (JS controls stroke-dashoffset) -->
-            <path id="arcFill" d="M 30 155 A 100 100 0 0 1 230 155" fill="none" stroke="url(#gaugeGrad)" stroke-width="14" stroke-linecap="round" style="stroke-dasharray:314;stroke-dashoffset:314;transition:stroke-dashoffset .8s ease"/>
-            <!-- Needle -->
-            <line id="arcNeedle" x1="130" y1="155" x2="130" y2="68" stroke="#111827" stroke-width="2.5" stroke-linecap="round" transform="rotate(-90,130,155)" style="transition:transform .8s ease"/>
-            <circle cx="130" cy="155" r="5" fill="#111827"/>
-          </svg>
-          <div class="gauge-score">
-            <span id="arcScoreBadge" class="score-num">—</span>
-            <span id="vibeScoreLabel" class="score-label">/ 100</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="overview-right">
-        <h2 class="section-title">Sentiment</h2>
-        <!-- Stacked bar -->
-        <div class="stacked-bar-wrap">
-          <div class="stacked-bar">
-            <div id="statPos" class="bar-seg seg-pos" style="width:0%"></div>
-            <div id="statNeu" class="bar-seg seg-neu" style="width:0%"></div>
-            <div id="statNeg" class="bar-seg seg-neg" style="width:0%"></div>
-          </div>
-          <div class="bar-legend">
-            <div class="legend-item">
-              <span class="legend-dot dot-pos"></span>
-              <span class="legend-pct pos-pct">0%</span>
-              <span class="legend-name">Positive</span>
-              <span id="statPosCount" class="legend-count">0 comments</span>
-            </div>
-            <div class="legend-item">
-              <span class="legend-dot dot-neu"></span>
-              <span class="legend-pct neu-pct">0%</span>
-              <span class="legend-name">Neutral</span>
-              <span id="statNeuCount" class="legend-count">0 comments</span>
-            </div>
-            <div class="legend-item">
-              <span class="legend-dot dot-neg"></span>
-              <span class="legend-pct neg-pct">0%</span>
-              <span class="legend-name">Negative</span>
-              <span id="statNegCount" class="legend-count">0 comments</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Flag chips -->
-        <div class="flag-chips">
-          <span class="chip chip-hate">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1L10 6H15L11 9L12.5 14L8 11L3.5 14L5 9L1 6H6Z"/></svg>
-            Hate: <strong id="statHate">0</strong>
-          </span>
-          <span class="chip chip-good">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8l3 3 7-7"/></svg>
-            Good: <strong id="statGood">0</strong>
-          </span>
-          <span class="chip chip-none">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/></svg>
-            Neutral: <strong id="statNone">0</strong>
-          </span>
-          <!-- Hidden compat IDs -->
-          <span hidden id="statHateCount"></span>
-          <span hidden id="statGoodCount"></span>
-          <span hidden id="statNoneCount"></span>
-          <span hidden id="statNeg"></span>
-          <span hidden id="statNegCount"></span>
-          <span hidden id="eqContainer"></span>
-          <span hidden id="count-hate"></span>
-          <span hidden id="count-good"></span>
-          <span hidden id="count-none"></span>
-        </div>
-      </div>
-    </div>
-
-    <!-- AI Summary -->
-    <div class="card narrative-card fade-up" style="--delay:.06s">
-      <h2 class="section-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="title-icon"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18"/></svg>
-        AI Vibe Summary
-      </h2>
-      <p id="narrativeText" class="narrative-body"></p>
-    </div>
-
-    <!-- Quick comparison card (shown only if similar video found) -->
-    <div id="quickCompCard" class="card quick-comp-card fade-up" style="--delay:.12s" hidden>
-      <h2 class="section-title" id="quickCompTitle">Quick Comparison</h2>
-      <div class="qc-grid">
-        <div class="qc-col">
-          <div class="qc-label">This video</div>
-          <div class="qc-bars">
-            <div class="qc-row"><span class="qc-name">Positive</span><div class="qc-bar-wrap"><div id="qcPriPos" class="qc-fill fill-pos" style="width:0%"></div></div></div>
-            <div class="qc-row"><span class="qc-name">Neutral</span><div class="qc-bar-wrap"><div id="qcPriNeu" class="qc-fill fill-neu" style="width:0%"></div></div></div>
-            <div class="qc-row"><span class="qc-name">Negative</span><div class="qc-bar-wrap"><div id="qcPriNeg" class="qc-fill fill-neg" style="width:0%"></div></div></div>
-          </div>
-        </div>
-        <div class="qc-col">
-          <div class="qc-label">Similar video</div>
-          <div class="qc-bars">
-            <div class="qc-row"><span class="qc-name">Positive</span><div class="qc-bar-wrap"><div id="qcSimPos" class="qc-fill fill-pos" style="width:0%"></div></div></div>
-            <div class="qc-row"><span class="qc-name">Neutral</span><div class="qc-bar-wrap"><div id="qcSimNeu" class="qc-fill fill-neu" style="width:0%"></div></div></div>
-            <div class="qc-row"><span class="qc-name">Negative</span><div class="qc-bar-wrap"><div id="qcSimNeg" class="qc-fill fill-neg" style="width:0%"></div></div></div>
-          </div>
-        </div>
-      </div>
-      <p id="qcSummary" class="qc-summary"></p>
-    </div>
-
-  </div><!-- /home-results -->
-</section>
-
-<!-- ══════════════════════════════════════════════════════════════════════
-     PAGE: COMMENTS
-════════════════════════════════════════════════════════════════════════ -->
-<section id="page-comments" class="page-view" hidden>
-  <div class="page-header">
-    <h1 class="page-title">Comments</h1>
-    <p class="page-sub">Comments classified by sentiment and content flag.</p>
-  </div>
-
-  <div id="empty-comments-list" class="empty-state" hidden>
-    <svg class="empty-robot" viewBox="0 0 80 90" fill="none">
-      <rect x="8" y="18" width="64" height="52" rx="12" fill="#E0E7FF"/>
-      <circle cx="28" cy="44" r="8" fill="white"/><circle cx="52" cy="44" r="8" fill="white"/>
-      <circle cx="28" cy="44" r="3" fill="#818CF8"/><circle cx="52" cy="44" r="3" fill="#818CF8"/>
-      <rect x="24" y="58" width="32" height="6" rx="3" fill="#C7D2FE"/>
-      <rect x="16" y="2" width="6" height="16" rx="3" fill="#A5B4FC"/>
-      <circle cx="19" cy="2" r="4" fill="#818CF8"/>
+  <!-- Robot avatar -->
+  <div class="header-avatar">
+    <svg class="header-robot" viewBox="0 0 32 32" fill="none">
+      <rect x="6" y="12" width="20" height="16" rx="5" fill="#0F0F0F"/>
+      <circle cx="12" cy="20" r="2.5" fill="white" opacity=".9"/>
+      <circle cx="20" cy="20" r="2.5" fill="white" opacity=".9"/>
+      <circle cx="12" cy="20" r="1" fill="#0F0F0F" class="eye-pupil"/>
+      <circle cx="20" cy="20" r="1" fill="#0F0F0F" class="eye-pupil"/>
+      <rect x="14" y="6" width="4" height="7" rx="2" fill="#606060"/>
+      <circle cx="16" cy="5" r="2.5" fill="#FF0000"/>
+      <rect x="10" y="28" width="5" height="2" rx="1" fill="#606060"/>
+      <rect x="17" y="28" width="5" height="2" rx="1" fill="#606060"/>
     </svg>
-    <p>Analyze a video to see classified comments.</p>
   </div>
+</header><!-- /header -->
 
-  <div id="comments-list-results" hidden>
-    <div id="categorized-comments-container"></div>
-  </div>
-</section>
+<div class="body-row">
 
-<!-- ══════════════════════════════════════════════════════════════════════
-     PAGE: SIMILAR VIDEO
-════════════════════════════════════════════════════════════════════════ -->
-<section id="page-similar" class="page-view" hidden>
-  <div class="page-header">
-    <h1 class="page-title">Similar Video</h1>
-    <p class="page-sub">A thematically related video found by our Agent 2.</p>
-  </div>
+<!-- ── SIDEBAR ──────────────────────────────────────────── -->
+<nav class="sidebar" id="sidebar" role="navigation" aria-label="Main navigation">
+  <a href="#/home" class="sidebar-link active" data-page="home" aria-label="Home">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5Z"/><path d="M9 21V12h6v9"/></svg>
+    <span class="sidebar-label">Home</span>
+  </a>
+  <a href="#/comments" class="sidebar-link" data-page="comments" aria-label="Comments">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    <span class="sidebar-label">Comments</span>
+  </a>
+  <a href="#/similar" class="sidebar-link" data-page="similar" aria-label="Similar Video">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+    <span class="sidebar-label">Similar Video</span>
+  </a>
+  <a href="#/comparison" class="sidebar-link" data-page="comparison" aria-label="Comparison">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    <span class="sidebar-label">Comparison</span>
+  </a>
+  <a href="#/ask" class="sidebar-link" data-page="ask" aria-label="Ask Comments">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="2.5" stroke-linecap="round"/></svg>
+    <span class="sidebar-label">Ask Comments</span>
+  </a>
+</nav>
 
-  <div id="empty-similar" class="empty-state" hidden>
-    <svg class="empty-robot" viewBox="0 0 80 90" fill="none">
-      <rect x="8" y="18" width="64" height="52" rx="12" fill="#E0E7FF"/>
-      <circle cx="28" cy="44" r="8" fill="white"/><circle cx="52" cy="44" r="8" fill="white"/>
-      <circle cx="28" cy="44" r="3" fill="#818CF8"/><circle cx="52" cy="44" r="3" fill="#818CF8"/>
-      <rect x="24" y="58" width="32" height="6" rx="3" fill="#C7D2FE"/>
-      <rect x="16" y="2" width="6" height="16" rx="3" fill="#A5B4FC"/>
-      <circle cx="19" cy="2" r="4" fill="#818CF8"/>
-    </svg>
-    <p>No similar video found for the current analysis.</p>
-  </div>
+<!-- ── MAIN ──────────────────────────────────────────────── -->
+<main class="main-content" role="main">
 
-  <div id="similar-results" hidden>
-    <div class="card similar-card">
-      <!-- Thumbnail / embed area -->
-      <div class="thumb-area" id="thumbArea">
-        <img id="svThumb" src="" alt="" class="thumb-img" />
-        <button class="play-overlay" id="thumbPlayBtn" aria-label="Open on YouTube">
-          <svg viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        </button>
-      </div>
+  <!-- Pipeline status text (shown under search while running) -->
+  <p class="pipeline-status" id="pipelineStatus" hidden></p>
 
-      <div class="similar-info">
-        <h2 id="svTitle" class="sv-title"></h2>
-        <p class="sv-meta">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="meta-icon"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
-          <span id="svChannel"></span>
-        </p>
+  <!-- ════════════════ HOME PAGE ════════════════ -->
+  <section class="page-view" id="page-home">
 
-        <!-- Sentiment summary -->
-        <div class="sv-stats">
-          <div class="stat-chip"><span class="dot dot-pos"></span>Positive <strong id="svPos">—</strong></div>
-          <div class="stat-chip"><span class="dot dot-neu"></span>Neutral <strong id="svNeu">—</strong></div>
-          <div class="stat-chip"><span class="dot dot-neg"></span>Negative <strong id="svNeg">—</strong></div>
-        </div>
-        <div class="sv-stats">
-          <div class="stat-chip chip-sm chip-hate">Hate <strong id="svHate">—</strong></div>
-          <div class="stat-chip chip-sm chip-good">Good <strong id="svGood">—</strong></div>
-          <div class="stat-chip chip-sm">Spam <strong id="svBad">—</strong></div>
-          <div class="stat-chip chip-sm">Neutral <strong id="svNone">—</strong></div>
-        </div>
-        <div class="sv-meta-row">
-          <span class="kv"><span class="kv-label">Vibe Score</span> <strong id="svVibeScore">—</strong></span>
-          <span class="kv"><span class="kv-label">Comments</span> <strong id="svTotalCount">—</strong></span>
-          <span class="kv"><span class="kv-label">Score</span> <strong id="svScore">—</strong></span>
-        </div>
-
-        <div class="sv-actions">
-          <a id="svLink" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>
-            Watch on YouTube
-          </a>
-          <button id="svEmbedBtn" class="btn btn-outline">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
-            Play here
+    <!-- Hero with background image -->
+    <div class="home-hero fade-up">
+      <img class="hero-img" src="/static/img/hero.webp" alt="" loading="eager" width="1600" height="900">
+      <div class="hero-overlay"></div>
+      <div class="hero-content">
+        <h1 class="hero-title">What's the vibe?</h1>
+        <p class="hero-sub">Paste any YouTube link — our multi-agent AI reads the comments so you don't have to.</p>
+        <!-- Hero search (mirrors the header search) -->
+        <div class="hero-form">
+          <div class="hero-search-box">
+            <svg class="hero-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+            <input class="hero-input" id="heroUrlInput" type="url"
+              placeholder="Paste a YouTube link or ID"
+              autocomplete="off" spellcheck="false"
+              aria-label="YouTube video URL"/>
+          </div>
+          <button class="btn btn-primary" id="heroAnalyzeBtn" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            Analyze
           </button>
         </div>
+        <p class="hero-hint">Supports youtube.com/watch?v=, Shorts, and bare IDs</p>
       </div>
     </div>
-  </div>
-</section>
 
-<!-- ══════════════════════════════════════════════════════════════════════
-     PAGE: COMPARISON
-════════════════════════════════════════════════════════════════════════ -->
-<section id="page-comparison" class="page-view" hidden>
-  <div class="page-header">
-    <h1 class="page-title">Comparison</h1>
-    <p class="page-sub">Primary video vs. similar video — head to head.</p>
-  </div>
-
-  <div id="empty-comparison" class="empty-state" hidden>
-    <p>No comparison data available yet. Analyze a video first.</p>
-  </div>
-
-  <div id="comparison-unavailable" class="info-banner" hidden>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/></svg>
-    Similar video not found — comparison unavailable.
-  </div>
-
-  <div id="comparison-results" hidden>
-    <div class="card comp-card">
-      <div class="comp-header">
-        <span id="compStatusBadge" class="status-badge"></span>
-        <span id="compWinner" class="winner-badge"></span>
-      </div>
-      <p id="compSummary" class="comp-summary"></p>
-      <p id="compReason" class="comp-reason"></p>
-
-      <div class="comp-table-wrap">
-        <table class="comp-table">
-          <thead><tr><th>Metric</th><th>This video</th><th>Similar video</th></tr></thead>
-          <tbody>
-            <tr><td>Positive %</td><td id="compPriPos">—</td><td id="compSimPos">—</td></tr>
-            <tr><td>Neutral %</td><td id="compPriNeu">—</td><td id="compSimNeu">—</td></tr>
-            <tr><td>Negative %</td><td id="compPriNeg">—</td><td id="compSimNeg">—</td></tr>
-            <tr><td>Safe %</td><td id="compPriSafe">—</td><td id="compSimSafe">—</td></tr>
-            <tr><td>Vibe Score</td><td id="compPriVibe">—</td><td id="compSimVibe">—</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ══════════════════════════════════════════════════════════════════════
-     PAGE: ASK COMMENTS
-════════════════════════════════════════════════════════════════════════ -->
-<section id="page-ask-comments" class="page-view" hidden>
-  <div class="page-header">
-    <h1 class="page-title">Ask the Comments</h1>
-    <p class="page-sub">Ask a natural language question about what commenters are saying.</p>
-  </div>
-
-  <div id="empty-ask-comments" class="empty-state" hidden>
-    <p>Analyze a video first, then come back to ask questions.</p>
-  </div>
-
-  <div id="ask-comments-results" hidden>
-    <div class="card qa-card">
-      <form id="qaForm" class="qa-form">
-        <div class="qa-input-wrap">
-          <input id="qaInput" type="text" class="qa-input" placeholder="What are people complaining about?" />
-          <button id="qaBtn" type="submit" class="btn btn-primary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/></svg>
-            Ask
-          </button>
+    <!-- Pipeline stepper (hidden until analysis starts) -->
+    <div id="agentStepper" hidden>
+      <div style="display:flex;gap:4px;align-items:center;overflow-x:auto;padding-bottom:4px;">
+        <div class="pip-step" id="step-fetching">
+          <svg class="pip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span class="pip-label">Fetching</span>
+          <span class="pip-status"></span>
         </div>
-      </form>
-      <div id="qaAnswerWrap" class="qa-answer-wrap" hidden>
-        <p id="qaAnswerText" class="qa-answer"></p>
+        <span aria-hidden="true" style="color:#E5E5E5">›</span>
+        <div class="pip-step" id="step-classifying">
+          <svg class="pip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          <span class="pip-label">Classifying</span>
+          <span class="pip-status"></span>
+        </div>
+        <span aria-hidden="true" style="color:#E5E5E5">›</span>
+        <div class="pip-step" id="step-aggregating">
+          <svg class="pip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span class="pip-label">Aggregating</span>
+          <span class="pip-status"></span>
+        </div>
+        <span aria-hidden="true" style="color:#E5E5E5">›</span>
+        <div class="pip-step" id="step-insight">
+          <svg class="pip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="2.5" stroke-linecap="round"/></svg>
+          <span class="pip-label">Insight</span>
+          <span class="pip-status"></span>
+        </div>
+        <span aria-hidden="true" style="color:#E5E5E5">›</span>
+        <div class="pip-step" id="step-similar_video">
+          <svg class="pip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+          <span class="pip-label">Similar</span>
+          <span class="pip-status"></span>
+        </div>
+        <span aria-hidden="true" style="color:#E5E5E5">›</span>
+        <div class="pip-step" id="step-comparing">
+          <svg class="pip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+          <span class="pip-label">Comparing</span>
+          <span class="pip-status"></span>
+        </div>
       </div>
     </div>
-  </div>
-</section>
 
-</div><!-- /container -->
-</main>
+    <!-- Skeleton while loading -->
+    <div id="homeSkeleton" hidden style="margin-top:24px;">
+      <div class="skel skel-player" style="margin-bottom:12px;"></div>
+      <div class="skel skel-title"></div>
+      <div class="skel skel-line" style="margin-top:8px;"></div>
+      <div class="skel skel-desc"></div>
+    </div>
 
-<!-- ── ERROR TOAST ────────────────────────────────────────────────────── -->
-<div id="errorToast" class="error-toast" role="alert" aria-live="assertive" hidden>
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
-  <span id="errorMsg">Something went wrong.</span>
-  <button class="toast-close" onclick="document.getElementById('errorToast').hidden=true" aria-label="Dismiss">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    <!-- Results: watch-page layout -->
+    <div id="home-results" hidden style="margin-top:24px;">
+      <div class="watch-layout">
+
+        <!-- Left column -->
+        <div class="watch-main">
+
+          <!-- Player -->
+          <div class="player-area" id="playerArea">
+            <img class="player-thumb" id="playerThumb" src="" alt="Video thumbnail" width="854" height="480"/>
+            <button class="player-overlay" id="playerOverlayBtn" aria-label="Play video">
+              <span class="play-btn-circle" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </span>
+            </button>
+          </div>
+
+          <!-- Video title + meta -->
+          <div class="video-title-row fade-up">
+            <h2 class="video-title" id="videoTitle">Video Analysis</h2>
+          </div>
+          <div class="video-meta-row fade-up" style="--delay:.05s">
+            <div class="channel-avatar" id="channelAvatarWrap">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#606060" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </div>
+            <span id="channelName" style="font-weight:500;"></span>
+          </div>
+
+          <!-- Description box / analysis summary -->
+          <div class="desc-box collapsed fade-up" id="descBox" style="--delay:.08s">
+            <!-- Gauge + stacked bar row -->
+            <div class="gauge-row" id="gaugeRow">
+              <div class="gauge-wrap">
+                <svg class="gauge-svg" viewBox="0 0 140 84" aria-label="Vibe score gauge">
+                  <defs>
+                    <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%"   stop-color="#C5221F"/>
+                      <stop offset="50%"  stop-color="#F59E0B"/>
+                      <stop offset="100%" stop-color="#188038"/>
+                    </linearGradient>
+                  </defs>
+                  <!-- Track -->
+                  <path d="M 15 75 A 55 55 0 0 1 125 75" fill="none" stroke="#E5E5E5" stroke-width="8" stroke-linecap="round"/>
+                  <!-- Fill arc -->
+                  <path id="arcFill" d="M 15 75 A 55 55 0 0 1 125 75" fill="none" stroke="url(#gaugeGrad)" stroke-width="8" stroke-linecap="round"
+                    stroke-dasharray="173" stroke-dashoffset="173" style="transition:stroke-dashoffset .9s cubic-bezier(.4,0,.2,1)"/>
+                  <!-- Needle -->
+                  <line id="arcNeedle" x1="70" y1="75" x2="70" y2="28" stroke="#0F0F0F" stroke-width="2" stroke-linecap="round"
+                    style="transform-origin:70px 75px; transform:rotate(-90deg); transition:transform .9s cubic-bezier(.4,0,.2,1)"/>
+                  <circle cx="70" cy="75" r="4" fill="#0F0F0F"/>
+                </svg>
+                <div class="gauge-score-wrap">
+                  <span class="gauge-num" id="arcScoreBadge">—</span>
+                  <span class="gauge-label" id="vibeScoreLabel">/ 100</span>
+                </div>
+              </div>
+              <div class="stacked-bar-wrap">
+                <div class="stacked-bar">
+                  <div class="bar-seg seg-pos" id="statPos" style="width:0%"></div>
+                  <div class="bar-seg seg-neu" id="statNeu" style="width:0%"></div>
+                  <div class="bar-seg seg-neg" id="statNeg" style="width:0%"></div>
+                </div>
+                <div class="bar-legend">
+                  <div class="legend-row">
+                    <span class="legend-dot dot-pos"></span>
+                    <span class="legend-pct"><span id="statPosCount">—</span>%</span>
+                    <span class="legend-name">Positive</span>
+                    <span class="legend-count">(<span id="statGoodCount">0</span>)</span>
+                  </div>
+                  <div class="legend-row">
+                    <span class="legend-dot dot-neu"></span>
+                    <span class="legend-pct"><span id="statNeuCount">—</span>%</span>
+                    <span class="legend-name">Neutral</span>
+                  </div>
+                  <div class="legend-row">
+                    <span class="legend-dot dot-neg"></span>
+                    <span class="legend-pct"><span id="statNegCount">—</span>%</span>
+                    <span class="legend-name">Negative</span>
+                    <span class="legend-count">(<span id="statHateCount">0</span> flagged)</span>
+                  </div>
+                </div>
+                <!-- Flag chips -->
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
+                  <span class="chip chip-hate" id="statHate">—% hate</span>
+                  <span class="chip chip-good" id="statGood">—% good</span>
+                  <span class="chip chip-spam" id="statNone">—% neutral</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI summary (collapsible) -->
+            <div class="ai-summary-header">
+              <!-- Small robot inline SVG -->
+              <svg class="ai-robot-sm" viewBox="0 0 24 24" fill="none">
+                <rect x="4" y="8" width="16" height="12" rx="4" fill="#0F0F0F"/>
+                <circle cx="9" cy="14" r="1.8" fill="white" opacity=".9"/>
+                <circle cx="15" cy="14" r="1.8" fill="white" opacity=".9"/>
+                <rect x="10" y="3" width="4" height="6" rx="2" fill="#606060"/>
+                <circle cx="12" cy="3" r="2" fill="#FF0000"/>
+              </svg>
+              <span>AI summary</span>
+            </div>
+            <div class="desc-body">
+              <p class="narrative-text" id="narrativeText"></p>
+            </div>
+            <button class="desc-more-btn" id="descMoreBtn" aria-expanded="false">...more</button>
+          </div>
+
+          <!-- Comments header + filters -->
+          <div class="comments-section">
+            <div class="comments-header">
+              <span class="comments-count" id="commentsCountLabel">Comments</span>
+              <div class="filter-chips" role="group" aria-label="Filter comments by flag">
+                <button class="chip active filter-btn" data-flag="all">All</button>
+                <button class="chip filter-btn" data-flag="hate">Hate</button>
+                <button class="chip filter-btn" data-flag="good">Good</button>
+                <button class="chip filter-btn" data-flag="bad">Spam</button>
+                <button class="chip filter-btn" data-flag="none">Neutral</button>
+              </div>
+              <div class="filter-chips" role="group" aria-label="Filter comments by sentiment">
+                <button class="chip active filter-sentiment-btn" data-sentiment="all">All sentiment</button>
+                <button class="chip filter-sentiment-btn" data-sentiment="positive">Positive</button>
+                <button class="chip filter-sentiment-btn" data-sentiment="neutral">Neutral</button>
+                <button class="chip filter-sentiment-btn" data-sentiment="negative">Negative</button>
+              </div>
+            </div>
+            <!-- Comment counts (hidden compat spans) -->
+            <span id="count-all"  data-compat-hidden></span>
+            <span id="count-hate" data-compat-hidden></span>
+            <span id="count-good" data-compat-hidden></span>
+            <span id="count-none" data-compat-hidden></span>
+            <span id="count-bad"  data-compat-hidden></span>
+            <div id="categorized-comments-container"></div>
+            <div id="empty-comments-list" class="empty-state" hidden>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              <p>No comments match the selected filters.</p>
+            </div>
+          </div><!-- /comments-section -->
+
+        </div><!-- /watch-main -->
+
+        <!-- Right aside: similar + quick comparison -->
+        <aside class="watch-aside">
+          <div id="quickCompCard" hidden>
+            <h3 class="qc-title" id="quickCompTitle">Similar Video</h3>
+            <!-- Up-next style card (link to YouTube) -->
+            <a class="upnext-card" id="svLink" href="#" target="_blank" rel="noopener noreferrer">
+              <div class="upnext-thumb">
+                <img id="svThumb" src="" alt="Similar video thumbnail" loading="lazy" width="168" height="94"/>
+              </div>
+              <div class="upnext-info">
+                <p class="upnext-title" id="svTitle">Similar Video</p>
+                <p class="upnext-channel" id="svChannel"></p>
+                <span class="upnext-score">Vibe: <span id="svVibeScore">—</span></span>
+              </div>
+            </a>
+            <!-- Compact comparison card -->
+            <div class="quick-comp-card">
+              <div class="qc-grid">
+                <div>
+                  <p class="qc-label">This video</p>
+                  <div class="qc-bars">
+                    <div class="qc-row"><span class="qc-name">Positive</span><div class="qc-bar-wrap"><div class="qc-fill fill-pos" id="qcPriPos" style="width:0%"></div></div></div>
+                    <div class="qc-row"><span class="qc-name">Neutral</span> <div class="qc-bar-wrap"><div class="qc-fill fill-neu" id="qcPriNeu" style="width:0%"></div></div></div>
+                    <div class="qc-row"><span class="qc-name">Negative</span><div class="qc-bar-wrap"><div class="qc-fill fill-neg" id="qcPriNeg" style="width:0%"></div></div></div>
+                  </div>
+                </div>
+                <div>
+                  <p class="qc-label">Similar</p>
+                  <div class="qc-bars">
+                    <div class="qc-row"><span class="qc-name">Positive</span><div class="qc-bar-wrap"><div class="qc-fill fill-pos" id="qcSimPos" style="width:0%"></div></div></div>
+                    <div class="qc-row"><span class="qc-name">Neutral</span> <div class="qc-bar-wrap"><div class="qc-fill fill-neu" id="qcSimNeu" style="width:0%"></div></div></div>
+                    <div class="qc-row"><span class="qc-name">Negative</span><div class="qc-bar-wrap"><div class="qc-fill fill-neg" id="qcSimNeg" style="width:0%"></div></div></div>
+                  </div>
+                </div>
+              </div>
+              <p class="qc-summary" id="qcSummary"></p>
+            </div>
+          </div><!-- /quickCompCard -->
+        </aside>
+
+      </div><!-- /watch-layout -->
+    </div><!-- /home-results -->
+
+    <!-- Empty state when no analysis -->
+    <div id="empty-home" style="display:none;"></div><!-- compat -->
+
+    <!-- How It Works -->
+    <div id="howItWorksSection">
+      <div class="hiw-grid fade-up" style="--delay:.1s">
+        <div class="hiw-card">
+          <div class="hiw-img-wrap">
+            <img class="hiw-img" src="/static/img/hiw1.webp" alt="Person typing a YouTube URL on a laptop" loading="lazy" width="800" height="500"/>
+          </div>
+          <div class="hiw-body">
+            <p class="hiw-step">Step 1</p>
+            <p class="hiw-title">Paste a Link</p>
+            <p class="hiw-desc">Drop any YouTube URL, Shorts link, or bare video ID into the search bar.</p>
+          </div>
+        </div>
+        <div class="hiw-card">
+          <div class="hiw-img-wrap">
+            <img class="hiw-img" src="/static/img/hiw2.webp" alt="Abstract AI network visualization" loading="lazy" width="800" height="500"/>
+          </div>
+          <div class="hiw-body">
+            <p class="hiw-step">Step 2</p>
+            <p class="hiw-title">AI Reads the Comments</p>
+            <p class="hiw-desc">Multi-agent AI classifies sentiment, flags harmful content, and identifies patterns.</p>
+          </div>
+        </div>
+        <div class="hiw-card">
+          <div class="hiw-img-wrap">
+            <img class="hiw-img" src="/static/img/hiw3.webp" alt="Analytics chart showing insights" loading="lazy" width="800" height="500"/>
+          </div>
+          <div class="hiw-body">
+            <p class="hiw-step">Step 3</p>
+            <p class="hiw-title">Get the Vibe</p>
+            <p class="hiw-desc">See the score, sentiment breakdown, similar videos, and an AI-generated summary.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent analyses (history) -->
+    <div id="recentSection" style="display:none;" class="recent-section">
+      <h2>Recent analyses</h2>
+      <div class="recent-grid" id="recentGrid"></div>
+    </div>
+
+  </section><!-- /page-home -->
+
+
+  <!-- ════════════════ COMMENTS PAGE ════════════════ -->
+  <section class="page-view" id="page-comments" hidden>
+    <div class="page-header">
+      <h1 class="page-title">Comments</h1>
+      <p class="page-sub">Categorized sentiment and moderation analysis</p>
+    </div>
+    <!-- Filter controls mirror the home page ones -->
+    <div class="comments-header" style="margin-bottom:16px;">
+      <div class="filter-chips" role="group">
+        <button class="chip active filter-btn" data-flag="all">All</button>
+        <button class="chip filter-btn" data-flag="hate">Hate</button>
+        <button class="chip filter-btn" data-flag="good">Good</button>
+        <button class="chip filter-btn" data-flag="bad">Spam</button>
+        <button class="chip filter-btn" data-flag="none">Neutral</button>
+      </div>
+      <div class="filter-chips" role="group">
+        <button class="chip active filter-sentiment-btn" data-sentiment="all">All sentiment</button>
+        <button class="chip filter-sentiment-btn" data-sentiment="positive">Positive</button>
+        <button class="chip filter-sentiment-btn" data-sentiment="neutral">Neutral</button>
+        <button class="chip filter-sentiment-btn" data-sentiment="negative">Negative</button>
+      </div>
+    </div>
+    <div id="comments-list-results">
+      <div id="categorized-comments-container-2"></div><!-- secondary container, JS renders here on comments page -->
+    </div>
+    <div id="empty-ask-comments" class="empty-state" hidden>
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <p>Analyze a video first to see comments here.</p>
+    </div>
+  </section>
+
+
+  <!-- ════════════════ SIMILAR VIDEO PAGE ════════════════ -->
+  <section class="page-view" id="page-similar" hidden>
+    <div class="page-header">
+      <h1 class="page-title">Similar Video</h1>
+      <p class="page-sub">The most topically related video we found</p>
+    </div>
+    <div id="similar-results" hidden>
+      <div class="sv-card fade-up">
+        <div>
+          <div class="sv-thumb-wrap" id="thumbArea">
+            <img id="svThumb2" src="" alt="" loading="lazy" width="640" height="360"/>
+            <button class="sv-play-overlay" id="thumbPlayBtn" aria-label="Open video on YouTube">
+              <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </button>
+          </div>
+        </div>
+        <div>
+          <h2 class="sv-info-title" id="svTitle2"></h2>
+          <p class="sv-info-channel" id="svChannel2"></p>
+          <div class="sv-stats">
+            <span class="sv-stat-chip"><span class="legend-dot dot-pos" style="width:6px;height:6px;"></span> <span id="svPos">—</span>% pos</span>
+            <span class="sv-stat-chip"><span class="legend-dot dot-neu" style="width:6px;height:6px;"></span> <span id="svNeu">—</span>% neu</span>
+            <span class="sv-stat-chip"><span class="legend-dot dot-neg" style="width:6px;height:6px;"></span> <span id="svNeg">—</span>% neg</span>
+            <span class="sv-stat-chip">Hate: <span id="svHate">—</span>%</span>
+            <span class="sv-stat-chip">Good: <span id="svGood">—</span>%</span>
+            <span class="sv-stat-chip">Spam: <span id="svBad">—</span>%</span>
+            <span class="sv-stat-chip">Neutral: <span id="svNone">—</span>%</span>
+          </div>
+          <div class="sv-meta-row">
+            <span>Score: <strong id="svScore">—</strong></span>
+            <span>Comments: <strong id="svTotalCount">—</strong></span>
+          </div>
+          <div class="sv-actions">
+            <a class="btn btn-secondary" id="svLink2" href="#" target="_blank" rel="noopener noreferrer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+              Watch on YouTube
+            </a>
+            <button class="btn btn-secondary" id="svEmbedBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Play here
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="similar-unavailable" class="info-banner" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="2.5" stroke-linecap="round"/></svg>
+      <span>No similar video found for this analysis.</span>
+    </div>
+    <div id="empty-similar" class="empty-state">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+      <p>Analyze a video first to see a similar video here.</p>
+    </div>
+  </section>
+
+
+  <!-- ════════════════ COMPARISON PAGE ════════════════ -->
+  <section class="page-view" id="page-comparison" hidden>
+    <div class="page-header">
+      <h1 class="page-title">Comparison</h1>
+      <p class="page-sub">Side-by-side sentiment and vibe analysis</p>
+    </div>
+    <div id="comparison-results" hidden>
+      <div class="comp-two-col fade-up">
+        <!-- Primary -->
+        <div class="comp-vid-card">
+          <div class="comp-vid-thumb">
+            <img id="compPriThumb" src="" alt="" loading="lazy" width="400" height="225"/>
+          </div>
+          <p class="comp-vid-title" id="compPriTitle">This video</p>
+          <p class="comp-vid-channel" style="font-size:12px;color:var(--txt-2);margin-bottom:8px;" id="compPriChannel"></p>
+          <div class="comp-vid-score" id="compPriVibe">—</div>
+          <!-- mini stacked bar -->
+          <div class="stacked-bar" style="height:5px;margin-bottom:6px;">
+            <div class="bar-seg seg-pos" id="compPriPos" style="width:0%"></div>
+            <div class="bar-seg seg-neu" id="compPriNeu" style="width:0%"></div>
+            <div class="bar-seg seg-neg" id="compPriNeg" style="width:0%"></div>
+          </div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;font-size:11px;color:var(--txt-2);">
+            <span>Hate: <strong id="compPriSafe">—%</strong></span>
+          </div>
+        </div>
+        <!-- Similar -->
+        <div class="comp-vid-card">
+          <div class="comp-vid-thumb">
+            <img id="compSimThumb" src="" alt="" loading="lazy" width="400" height="225"/>
+          </div>
+          <p class="comp-vid-title" id="compSimTitle">Similar video</p>
+          <p class="comp-vid-channel" style="font-size:12px;color:var(--txt-2);margin-bottom:8px;" id="compSimChannel"></p>
+          <div class="comp-vid-score" id="compSimVibe">—</div>
+          <div class="stacked-bar" style="height:5px;margin-bottom:6px;">
+            <div class="bar-seg seg-pos" id="compSimPos" style="width:0%"></div>
+            <div class="bar-seg seg-neu" id="compSimNeu" style="width:0%"></div>
+            <div class="bar-seg seg-neg" id="compSimNeg" style="width:0%"></div>
+          </div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;font-size:11px;color:var(--txt-2);">
+            <span>Hate: <strong id="compSimSafe">—%</strong></span>
+          </div>
+        </div>
+      </div>
+      <!-- Narrative -->
+      <div class="comp-narrative fade-up" style="--delay:.08s">
+        <span class="comp-status-badge" id="compStatusBadge">AI narrative</span>
+        <h3 id="compWinner" style="margin-bottom:6px;font-size:15px;font-weight:500;"></h3>
+        <p class="comp-narrative" id="compSummary" style="background:none;padding:0;"></p>
+        <p style="font-size:12px;color:var(--txt-2);margin-top:6px;" id="compReason"></p>
+      </div>
+    </div>
+    <div id="comparison-unavailable" class="info-banner" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="2.5" stroke-linecap="round"/></svg>
+      <span>Comparison unavailable — analysis still running or similar video not found.</span>
+    </div>
+    <div id="empty-comparison" class="empty-state">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+      <p>Analyze a video first to see a comparison here.</p>
+    </div>
+  </section>
+
+
+  <!-- ════════════════ ASK COMMENTS PAGE ════════════════ -->
+  <section class="page-view" id="page-ask-comments" hidden>
+    <div class="page-header">
+      <h1 class="page-title">Ask Comments</h1>
+      <p class="page-sub">Ask anything about the comment section</p>
+    </div>
+
+    <div class="ask-intro fade-up">
+      <img class="ask-intro-img" src="/static/img/ask.webp" alt="Chat conversation illustration" loading="lazy" width="800" height="500"/>
+      <div class="ask-intro-text">
+        <h2>Chat with the comments</h2>
+        <p>Ask questions about what viewers are saying. The AI uses all classified comments as context to answer.</p>
+      </div>
+    </div>
+
+    <div class="ask-suggestions">
+      <button class="chip ask-suggestion-chip" data-q="What are people complaining about?">What are people complaining about?</button>
+      <button class="chip ask-suggestion-chip" data-q="What do viewers like most?">What do viewers like most?</button>
+      <button class="chip ask-suggestion-chip" data-q="Is there any hate or spam?">Any hate or spam?</button>
+    </div>
+
+    <form id="qaForm" class="chat-input-row" style="margin-bottom:16px;">
+      <input class="chat-input" id="qaInput" type="text" placeholder="Ask about the comments..." autocomplete="off" aria-label="Ask about comments"/>
+      <button class="btn btn-primary" id="qaBtn" type="submit">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Send
+      </button>
+    </form>
+
+    <div class="chat-panel" id="ask-comments-results">
+      <!-- messages injected here -->
+    </div>
+
+    <div id="qaAnswerWrap" hidden style="display:none;">
+      <!-- compat: qaAnswerText filled by JS -->
+      <div id="qaAnswerText"></div>
+    </div>
+  </section>
+
+</main><!-- /main-content -->
+</div><!-- /body-row -->
+
+<!-- ── BOTTOM NAV (mobile only) ──────────────────────────── -->
+<nav class="bottom-nav" role="navigation" aria-label="Mobile navigation">
+  <a href="#/home" class="bottom-nav-item active" data-page="home" aria-label="Home">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5Z"/><path d="M9 21V12h6v9"/></svg>
+    <span>Home</span>
+  </a>
+  <a href="#/comments" class="bottom-nav-item" data-page="comments" aria-label="Comments">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    <span>Comments</span>
+  </a>
+  <a href="#/similar" class="bottom-nav-item" data-page="similar" aria-label="Similar">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+    <span>Similar</span>
+  </a>
+  <a href="#/comparison" class="bottom-nav-item" data-page="comparison" aria-label="Comparison">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    <span>Compare</span>
+  </a>
+  <a href="#/ask" class="bottom-nav-item" data-page="ask" aria-label="Ask">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="2.5" stroke-linecap="round"/></svg>
+    <span>Ask</span>
+  </a>
+</nav>
+
+<!-- ── ERROR TOAST ────────────────────────────────────────── -->
+<div id="errorToast" class="error-toast" role="alert" aria-live="polite" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="2.5" stroke-linecap="round"/></svg>
+  <span id="errorMsg">An error occurred.</span>
+  <button class="toast-close" onclick="clearError()" aria-label="Dismiss error">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
   </button>
 </div>
 
-<!-- ── FOOTER ─────────────────────────────────────────────────────────── -->
-<footer class="site-footer">
-  <div class="container footer-inner">
-    <span>VibeCheck</span>
-    <span class="footer-sep">·</span>
-    <span>Multi-agent comment analysis</span>
-    <span class="footer-sep">·</span>
-    <span>Groq + LangGraph</span>
+<!-- Hidden compat elements for old JS references -->
+<span id="eqContainer"      data-compat-hidden></span>
+<span id="statGood"         data-compat-hidden></span>
+<span id="statBad"          data-compat-hidden></span>
+<span id="statPos2"         data-compat-hidden></span>
+
+</div><!-- /app-shell -->
+
+<!-- ── FOOTER ────────────────────────────────────────────── -->
+<footer class="site-footer" role="contentinfo">
+  <div class="footer-inner">
+    <div class="footer-links">
+      <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">YouTube Terms of Service</a>
+      <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google Privacy Policy</a>
+      <a href="#" id="imageCreditsLink">Image Credits</a>
+    </div>
+    <p class="footer-disclaimer">VibeCheck is an independent project and is not affiliated with or endorsed by YouTube.</p>
   </div>
 </footer>
 

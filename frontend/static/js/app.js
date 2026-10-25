@@ -58,25 +58,153 @@ function clearError() { $('errorToast').hidden = true; }
 
 // ── SPA Router ────────────────────────────────────────────────────────────────
 function navigate() {
-  clearError();  // dismiss any stale error from a previous session/navigation
+  clearError();
   const hash = window.location.hash || '#/home';
   document.querySelectorAll('.page-view').forEach(p => { p.hidden = true; });
-  document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+  // Update sidebar + bottom nav active states
+  document.querySelectorAll('.sidebar-link, .bottom-nav-item').forEach(l => l.classList.remove('active'));
 
-  let pageId = 'page-home';
-  if (hash === '#/comments')      pageId = 'page-comments';
-  if (hash === '#/similar-video') pageId = 'page-similar';
-  if (hash === '#/comparison')    pageId = 'page-comparison';
-  if (hash === '#/ask-comments')  pageId = 'page-ask-comments';
+  let pageId  = 'page-home';
+  let pageKey = 'home';
+  if (hash === '#/comments')      { pageId = 'page-comments';     pageKey = 'comments'; }
+  if (hash === '#/similar')       { pageId = 'page-similar';      pageKey = 'similar'; }
+  if (hash === '#/similar-video') { pageId = 'page-similar';      pageKey = 'similar'; }
+  if (hash === '#/comparison')    { pageId = 'page-comparison';   pageKey = 'comparison'; }
+  if (hash === '#/ask')           { pageId = 'page-ask-comments'; pageKey = 'ask'; }
+  if (hash === '#/ask-comments')  { pageId = 'page-ask-comments'; pageKey = 'ask'; }
 
-  $(pageId).hidden = false;
-  const link = document.querySelector(`.nav-link[href="${hash}"]`);
-  if (link) link.classList.add('active');
+  const pg = $(pageId);
+  if (pg) pg.hidden = false;
+
+  // Mark active in sidebar + bottom nav by data-page attribute
+  document.querySelectorAll(`[data-page="${pageKey}"]`).forEach(el => el.classList.add('active'));
 
   renderPage(pageId);
 }
 window.addEventListener('hashchange', navigate);
-document.addEventListener('DOMContentLoaded', navigate);
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Sidebar toggle
+  const sidebarToggle = $('sidebarToggle');
+  const sidebar       = $('sidebar');
+  if (sidebarToggle && sidebar) {
+    sidebarToggle.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
+  }
+
+  // Hero form wires to same submit logic as header
+  const heroUrlInput   = $('heroUrlInput');
+  const heroAnalyzeBtn = $('heroAnalyzeBtn');
+  if (heroAnalyzeBtn && heroUrlInput) {
+    heroAnalyzeBtn.addEventListener('click', () => {
+      const v = heroUrlInput.value.trim();
+      if (v) { $('urlInput').value = v; $('analyzeBtn').click(); }
+    });
+    heroUrlInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { heroAnalyzeBtn.click(); }
+    });
+    // Sync hero input from header on focus
+    heroUrlInput.addEventListener('focus', () => {
+      if ($('urlInput').value) heroUrlInput.value = $('urlInput').value;
+    });
+  }
+
+  // Ask-comment suggestion chips
+  document.querySelectorAll('.ask-suggestion-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const qInput = $('qaInput');
+      if (qInput) {
+        qInput.value = btn.dataset.q;
+        $('qaForm')?.dispatchEvent(new Event('submit', {cancelable:true, bubbles:true}));
+      }
+    });
+  });
+
+  // Description box "...more" toggle
+  const descMoreBtn = $('descMoreBtn');
+  const descBox     = $('descBox');
+  if (descMoreBtn && descBox) {
+    descMoreBtn.addEventListener('click', () => {
+      const collapsed = descBox.classList.toggle('collapsed');
+      descMoreBtn.textContent = collapsed ? '...more' : 'Show less';
+      descMoreBtn.setAttribute('aria-expanded', String(!collapsed));
+    });
+  }
+
+  // Image Credits link
+  const creditsLink = $('imageCreditsLink');
+  if (creditsLink) {
+    creditsLink.addEventListener('click', e => {
+      e.preventDefault();
+      window.open('/static/img/CREDITS.txt', '_blank', 'noopener');
+    });
+  }
+
+  // Player overlay → embed iframe on click
+  const playerOverlayBtn = $('playerOverlayBtn');
+  if (playerOverlayBtn) {
+    playerOverlayBtn.addEventListener('click', () => {
+      const data  = getSavedData();
+      const vidId = data?.video_id;
+      if (!vidId) return;
+      const playerArea = $('playerArea');
+      if (!playerArea || playerArea.querySelector('iframe')) return;
+      const iframe = document.createElement('iframe');
+      iframe.src   = `https://www.youtube-nocookie.com/embed/${vidId}?autoplay=1&rel=0`;
+      iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+      iframe.allowFullscreen = true;
+      iframe.style.cssText   = 'position:absolute;inset:0;width:100%;height:100%;border:0;';
+      playerArea.innerHTML   = '';
+      playerArea.appendChild(iframe);
+    });
+  }
+
+  // Load recent history from localStorage
+  loadRecentHistory();
+
+  navigate();
+});
+
+// ── Recent history ────────────────────────────────────────────────────────────
+function loadRecentHistory() {
+  try {
+    const hist = JSON.parse(localStorage.getItem('vibeHistory') || '[]').slice(0,12);
+    if (!hist.length) return;
+    const section = $('recentSection');
+    const grid    = $('recentGrid');
+    if (!section || !grid) return;
+    section.style.display = 'block';
+    grid.innerHTML = '';
+    hist.forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'video-card';
+      card.innerHTML = `
+        <div class="vc-thumb">
+          <img src="https://i.ytimg.com/vi/${item.video_id}/mqdefault.jpg" alt="${escHtml(item.title || 'Video')}" loading="lazy" width="320" height="180"/>
+          <span class="vc-score-chip">${item.vibe_score ?? '?'}</span>
+        </div>
+        <div class="vc-info">
+          <p class="vc-title">${escHtml(item.title || item.video_id)}</p>
+        </div>`;
+      card.addEventListener('click', () => {
+        $('urlInput').value = `https://www.youtube.com/watch?v=${item.video_id}`;
+        $('analyzeBtn').click();
+      });
+      grid.appendChild(card);
+    });
+  } catch { /* localStorage blocked */ }
+}
+
+function saveToHistory(data) {
+  try {
+    const hist = JSON.parse(localStorage.getItem('vibeHistory') || '[]');
+    const entry = { video_id: data.video_id, title: data.title || '', vibe_score: data.vibe_score };
+    const filtered = hist.filter(h => h.video_id !== entry.video_id);
+    filtered.unshift(entry);
+    localStorage.setItem('vibeHistory', JSON.stringify(filtered.slice(0,12)));
+  } catch { /* ignore */ }
+}
+
+
 
 // ── Page renderers ────────────────────────────────────────────────────────────
 function renderPage(pageId) {
@@ -121,76 +249,113 @@ function countUp(el, target, suffix = '%', dur = 800) {
 // ── Home population ───────────────────────────────────────────────────────────
 function populateHomeData(data) {
   $('home-results').hidden = false;
+  // Hide How It Works when results are showing
+  const hiw = $('howItWorksSection');
+  if (hiw) hiw.style.display = 'none';
 
-  // Vibe score + needle + arc fill
-  const score = data.vibe_score || 0;
-  $('vibeScoreLabel').textContent = '/ 100';
-  countUp($('arcScoreBadge'), score, '', 800);
-  // Arc: semi-circle path length ~314; offset = 314 - (score/100)*314
-  const arcEl = $('arcFill');
-  if (arcEl) {
-    const filled = (score / 100) * 314;
-    arcEl.style.strokeDashoffset = String(314 - filled);
+  // Set player thumbnail
+  const vidId = data.video_id || '';
+  const playerThumb = $('playerThumb');
+  if (playerThumb && vidId) {
+    playerThumb.src = `https://i.ytimg.com/vi/${vidId}/hqdefault.jpg`;
+    playerThumb.onerror = () => { playerThumb.style.display = 'none'; };
   }
-  // Needle: rotate from -90deg (0) to +90deg (100) around pivot 130,155
-  const needleAngle = -90 + (score / 100) * 180;
-  const needleEl = $('arcNeedle');
-  if (needleEl) needleEl.setAttribute('transform', `rotate(${needleAngle},130,155)`);
 
-  // Stacked sentiment bar (new design — replaces EQ bars)
+  // Video title + channel
+  const vtEl = $('videoTitle');
+  if (vtEl && data.title) vtEl.textContent = data.title;
+  const chEl = $('channelName');
+  if (chEl && data.channel_title) chEl.textContent = data.channel_title;
+
+  // Save to history
+  if (vidId) saveToHistory(data);
+
+  // Vibe score + needle + arc fill (new gauge: pivot 70,75; arc length ~173 for 55r semicircle)
+  const score = data.vibe_score || 0;
+  const vibeLabel = $('vibeScoreLabel');
+  if (vibeLabel) vibeLabel.textContent = '/ 100';
+  const arcScore = $('arcScoreBadge');
+  if (arcScore) countUp(arcScore, score, '', 800);
+
+  const arcEl = $('arcFill');
+  const ARC_LEN = 173; // π × 55
+  if (arcEl) arcEl.style.strokeDashoffset = String(ARC_LEN - (score / 100) * ARC_LEN);
+
+  const needleEl = $('arcNeedle');
+  const needleAngle = -90 + (score / 100) * 180;
+  if (needleEl) needleEl.style.transform = `rotate(${needleAngle}deg)`;
+
+  // Stacked sentiment bar
   const sp = data.sentiment_percentages || {};
   const sc = data.sentiment_counts || {};
   const posW = sp.positive || 0, neuW = sp.neutral || 0, negW = sp.negative || 0;
   const barPos = $('statPos'), barNeu = $('statNeu'), barNeg = $('statNeg');
-  if (barPos) { barPos.style.width = posW + '%'; }
-  if (barNeu) { barNeu.style.width = neuW + '%'; }
-  if (barNeg) { barNeg.style.width = negW + '%'; }
+  if (barPos) barPos.style.width = posW + '%';
+  if (barNeu) barNeu.style.width = neuW + '%';
+  if (barNeg) barNeg.style.width = negW + '%';
 
-  // Legend percentages
-  const posLegend = document.querySelector('.pos-pct');
-  const neuLegend = document.querySelector('.neu-pct');
-  const negLegend = document.querySelector('.neg-pct');
-  if (posLegend) countUp(posLegend, posW);
-  if (neuLegend) countUp(neuLegend, neuW);
-  if (negLegend) countUp(negLegend, negW);
-  $('statPosCount').textContent = (sc.positive || 0) + ' comments';
-  $('statNeuCount').textContent = (sc.neutral  || 0) + ' comments';
-  $('statNegCount').textContent = (sc.negative || 0) + ' comments';
+  const pc = $('statPosCount'), nc = $('statNeuCount'), gc = $('statNegCount');
+  if (pc) pc.textContent = posW;
+  if (nc) nc.textContent = neuW;
+  if (gc) gc.textContent = negW;
+  const sgc = $('statGoodCount'), shc = $('statHateCount');
+  if (sgc) sgc.textContent = sc.positive || 0;
+  if (shc) shc.textContent = (data.flag_counts?.hate || 0);
 
   // Safety chips
   const fp = data.flag_percentages || {};
-  const fc = data.flag_counts || {};
   const sh = $('statHate'), sg = $('statGood'), sn = $('statNone');
-  if (sh) sh.textContent = (fp.hate || 0) + '%';
-  if (sg) sg.textContent = (fp.good || 0) + '%';
-  if (sn) sn.textContent = (fp.none || 0) + '%';
-  const shc = $('statHateCount'), sgc = $('statGoodCount'), snc = $('statNoneCount');
-  if (shc) shc.textContent = (fc.hate || 0) + ' comments';
-  if (sgc) sgc.textContent = (fc.good || 0) + ' comments';
-  if (snc) snc.textContent = (fc.none || 0) + ' comments';
+  if (sh) sh.textContent = (fp.hate || 0) + '% hate';
+  if (sg) sg.textContent = (fp.good || 0) + '% good';
+  if (sn) sn.textContent = (fp.none || 0) + '% neutral';
 
   // Narrative
-  $('narrativeText').textContent = data.narrative || 'Narrative not available.';
+  const narEl = $('narrativeText');
+  if (narEl) narEl.textContent = data.narrative || 'Narrative not available.';
 
-  // Quick comparison card
-  if (data.comparison && data.comparison.sentiment_comparison && data.similar_video) {
-    const c = data.comparison;
+  // comments count label
+  const ccLabel = $('commentsCountLabel');
+  const total = data.classified_comments?.filter(c => c.status === 'success').length || 0;
+  if (ccLabel) ccLabel.textContent = `${total} comments analysed`;
+
+  // Quick comparison card (aside)
+  if (data.comparison?.sentiment_comparison && data.similar_video) {
+    const c  = data.comparison;
     const sv = data.similar_video;
-    $('quickCompTitle').textContent = `vs. ${sv.title?.slice(0, 50) || 'Similar Video'}`;
-    const pp = c.sentiment_comparison?.primary || {};
+    const qt = $('quickCompTitle');
+    if (qt) qt.textContent = `vs. ${(sv.title||'Similar Video').slice(0,50)}`;
+
+    // Upnext card (thumbnail + link)
+    const svThumb = $('svThumb');
+    if (svThumb && sv.video_id) {
+      svThumb.src = sv.thumbnail_url || `https://i.ytimg.com/vi/${sv.video_id}/hqdefault.jpg`;
+      svThumb.alt = sv.title || 'Similar video thumbnail';
+    }
+    const svTitleEl = $('svTitle');
+    if (svTitleEl) svTitleEl.textContent = sv.title || '';
+    const svChanEl = $('svChannel');
+    if (svChanEl) svChanEl.textContent = sv.channel_title || '';
+    const svVibe = $('svVibeScore');
+    if (svVibe) svVibe.textContent = data.similar_analysis?.vibe_score ?? '—';
+    const svLinkEl = $('svLink');
+    if (svLinkEl && sv.video_id) svLinkEl.href = `https://www.youtube.com/watch?v=${sv.video_id}`;
+
+    const pp  = c.sentiment_comparison?.primary || {};
     const sp2 = c.sentiment_comparison?.similar || {};
-    $('qcPriPos').style.width = (pp.positive || 0) + '%';
-    $('qcPriNeu').style.width = (pp.neutral  || 0) + '%';
-    $('qcPriNeg').style.width = (pp.negative || 0) + '%';
-    $('qcSimPos').style.width = (sp2.positive || 0) + '%';
-    $('qcSimNeu').style.width = (sp2.neutral  || 0) + '%';
-    $('qcSimNeg').style.width = (sp2.negative || 0) + '%';
-    $('qcSummary').textContent = c.summary || '';
+    const ids = ['qcPriPos','qcPriNeu','qcPriNeg','qcSimPos','qcSimNeu','qcSimNeg'];
+    const vals = [pp.positive,pp.neutral,pp.negative,sp2.positive,sp2.neutral,sp2.negative];
+    ids.forEach((id,i) => { const el=$( id); if(el) el.style.width=(vals[i]||0)+'%'; });
+    const qcs = $('qcSummary');
+    if (qcs) qcs.textContent = c.summary || '';
     $('quickCompCard').hidden = false;
   } else {
     $('quickCompCard').hidden = true;
   }
+
+  // Render comments in the home page container
+  renderCategorizedComments(data);
 }
+
 
 // ── Similar Video page ────────────────────────────────────────────────────────
 function renderSimilarPage(data) {
@@ -202,71 +367,69 @@ function renderSimilarPage(data) {
   }
   $('empty-similar').hidden = true; $('similar-unavailable').hidden = true; $('similar-results').hidden = false;
 
-  const sv = data.similar_video;
-  $('svTitle').textContent   = sv.title;
-  $('svChannel').textContent = sv.channel_title || '—';
-  $('svScore').textContent   = sv.score != null ? sv.score.toFixed(3) : '—';
+  const sv     = data.similar_video;
+  const vidId  = sv.video_id || '';
+  const ytUrl  = sv.url || `https://www.youtube.com/watch?v=${vidId}`;
+  const thumbUrl = sv.thumbnail_url || `https://i.ytimg.com/vi/${vidId}/hqdefault.jpg`;
 
-  // Thumbnail
-  const thumbImg  = $('svThumb');
-  const thumbArea = $('thumbArea');
-  const vidId     = sv.video_id || '';
-  const thumbUrl  = sv.thumbnail_url || `https://i.ytimg.com/vi/${vidId}/hqdefault.jpg`;
-  if (thumbImg) {
-    thumbImg.src = thumbUrl;
-    thumbImg.alt = sv.title || 'Similar video thumbnail';
-    thumbImg.onerror = () => { thumbImg.src = `https://i.ytimg.com/vi/${vidId}/hqdefault.jpg`; };
+  // Page-specific title/channel
+  const t2 = $('svTitle2');   if (t2) t2.textContent = sv.title || '';
+  const c2 = $('svChannel2'); if (c2) c2.textContent = sv.channel_title || '—';
+
+  // Thumbnail (page)
+  const thumbImg2 = $('svThumb2');
+  if (thumbImg2) {
+    thumbImg2.src = thumbUrl;
+    thumbImg2.alt = sv.title || 'Similar video thumbnail';
+    thumbImg2.onerror = () => { thumbImg2.src = `https://i.ytimg.com/vi/${vidId}/hqdefault.jpg`; };
   }
 
-  // YouTube link
-  const ytUrl = sv.url || `https://www.youtube.com/watch?v=${vidId}`;
-  const link = $('svLink');
-  if (link) link.href = ytUrl;
+  // Watch on YouTube (page button)
+  const lnk2 = $('svLink2');
+  if (lnk2) lnk2.href = ytUrl;
 
-  // thumbPlayBtn → open YouTube in new tab (removes duplicate listeners via clone)
-  const playBtn = $('thumbPlayBtn');
-  if (playBtn && vidId) {
-    const fresh = playBtn.cloneNode(true);
-    playBtn.parentNode.replaceChild(fresh, playBtn);
+  // thumbPlayBtn → open YouTube
+  const thumbArea    = $('thumbArea');
+  const thumbPlayBtn = $('thumbPlayBtn');
+  if (thumbPlayBtn && vidId) {
+    const fresh = thumbPlayBtn.cloneNode(true);
+    thumbPlayBtn.parentNode.replaceChild(fresh, thumbPlayBtn);
     fresh.addEventListener('click', () => window.open(ytUrl, '_blank', 'noopener,noreferrer'));
   }
 
-  // svEmbedBtn → swap thumbnail for nocookie iframe (once, guards against re-render)
+  // svEmbedBtn → nocookie iframe
   const embedBtn = $('svEmbedBtn');
   if (embedBtn && vidId && thumbArea) {
     const fresh2 = embedBtn.cloneNode(true);
     embedBtn.parentNode.replaceChild(fresh2, embedBtn);
     fresh2.addEventListener('click', () => {
-      if (thumbArea.querySelector('iframe')) return; // already embedded
+      if (thumbArea.querySelector('iframe')) return;
       const iframe = document.createElement('iframe');
-      iframe.src    = `https://www.youtube-nocookie.com/embed/${vidId}?autoplay=1&rel=0`;
-      iframe.allow  = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+      iframe.src   = `https://www.youtube-nocookie.com/embed/${vidId}?autoplay=1&rel=0`;
+      iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
       iframe.allowFullscreen = true;
-      iframe.style.cssText   = 'position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:8px;';
-      // Replace thumb + overlay with iframe
-      thumbArea.innerHTML = '';
-      thumbArea.style.position = 'relative';
+      iframe.style.cssText   = 'position:absolute;inset:0;width:100%;height:100%;border:0;';
+      thumbArea.innerHTML    = '';
       thumbArea.appendChild(iframe);
       fresh2.hidden = true;
     });
   }
 
-  // Similar video analysis stats
+  // Stats (shared IDs used by aside AND page)
   const sa = data.similar_analysis;
   if (sa) {
     const sp2 = sa.sentiment_percentages || {};
     const fp2 = sa.flag_percentages || {};
-    $('svPos').textContent  = (sp2.positive || 0) + '%';
-    $('svNeu').textContent  = (sp2.neutral  || 0) + '%';
-    $('svNeg').textContent  = (sp2.negative || 0) + '%';
-    $('svHate').textContent = (fp2.hate || 0) + '%';
-    $('svGood').textContent = (fp2.good || 0) + '%';
-    $('svBad').textContent  = (fp2.bad  || 0) + '%';
-    $('svNone').textContent = (fp2.none || 0) + '%';
-    $('svVibeScore').textContent = sa.vibe_score ?? '—';
-    $('svTotalCount').textContent = sa.total || 0;
+    const sentMap = { svPos:'positive', svNeu:'neutral', svNeg:'negative' };
+    const flagMap = { svHate:'hate', svGood:'good', svBad:'bad', svNone:'none' };
+    Object.entries(sentMap).forEach(([id,k]) => { const el=$(id); if(el) el.textContent=(sp2[k]||0)+'%'; });
+    Object.entries(flagMap).forEach(([id,k]) => { const el=$(id); if(el) el.textContent=(fp2[k]||0)+'%'; });
+    const sc = $('svScore');     if (sc) sc.textContent = sv.score != null ? sv.score.toFixed(3) : '—';
+    const tc = $('svTotalCount'); if (tc) tc.textContent = sa.total || 0;
+    const vs = $('svVibeScore'); if (vs) vs.textContent = sa.vibe_score ?? '—';
   }
 }
+
 
 
 // ── Comparison page ───────────────────────────────────────────────────────────
@@ -282,21 +445,40 @@ function renderComparisonPage(data) {
 
   const pp = c.sentiment_comparison?.primary || {};
   const sp = c.sentiment_comparison?.similar || {};
-  $('compPriPos').textContent  = (pp.positive || 0) + '%';
-  $('compPriNeu').textContent  = (pp.neutral  || 0) + '%';
-  $('compPriNeg').textContent  = (pp.negative || 0) + '%';
-  $('compPriVibe').textContent = c.vibe_comparison?.primary ?? '—';
-  $('compPriSafe').textContent = (c.safety_comparison?.primary?.hate || 0) + '%';
-  $('compSimPos').textContent  = (sp.positive || 0) + '%';
-  $('compSimNeu').textContent  = (sp.neutral  || 0) + '%';
-  $('compSimNeg').textContent  = (sp.negative || 0) + '%';
-  $('compSimVibe').textContent = c.vibe_comparison?.similar ?? '—';
-  $('compSimSafe').textContent = (c.safety_comparison?.similar?.hate || 0) + '%';
-  $('compWinner').textContent  = c.winner || '—';
-  $('compSummary').textContent = c.summary || '';
-  $('compReason').textContent  = c.reason  || '';
-  $('compStatusBadge').textContent = c.status === 'partial' ? 'deterministic fallback' : 'AI narrative';
+
+  // Stacked bars (width %)
+  const el = id => $(id);
+  if (el('compPriPos')) el('compPriPos').style.width = (pp.positive || 0) + '%';
+  if (el('compPriNeu')) el('compPriNeu').style.width = (pp.neutral  || 0) + '%';
+  if (el('compPriNeg')) el('compPriNeg').style.width = (pp.negative || 0) + '%';
+  if (el('compSimPos')) el('compSimPos').style.width = (sp.positive || 0) + '%';
+  if (el('compSimNeu')) el('compSimNeu').style.width = (sp.neutral  || 0) + '%';
+  if (el('compSimNeg')) el('compSimNeg').style.width = (sp.negative || 0) + '%';
+
+  // Vibe scores
+  if (el('compPriVibe')) el('compPriVibe').textContent = c.vibe_comparison?.primary ?? '—';
+  if (el('compSimVibe')) el('compSimVibe').textContent = c.vibe_comparison?.similar ?? '—';
+  if (el('compPriSafe')) el('compPriSafe').textContent = (c.safety_comparison?.primary?.hate || 0) + '%';
+  if (el('compSimSafe')) el('compSimSafe').textContent = (c.safety_comparison?.similar?.hate || 0) + '%';
+
+  // Thumbnails
+  const priId = data.video_id;
+  const simId = data.similar_video?.video_id;
+  const pt = $('compPriThumb'); if (pt && priId) { pt.src = `https://i.ytimg.com/vi/${priId}/mqdefault.jpg`; pt.alt = data.title || 'Primary video'; }
+  const st = $('compSimThumb'); if (st && simId) { st.src = `https://i.ytimg.com/vi/${simId}/mqdefault.jpg`; st.alt = data.similar_video?.title || 'Similar video'; }
+
+  // Titles / channels
+  const pt2 = $('compPriTitle'); if (pt2 && data.title) pt2.textContent = data.title;
+  const pc  = $('compPriChannel'); if (pc && data.channel_title) pc.textContent = data.channel_title;
+  const st2 = $('compSimTitle'); if (st2 && data.similar_video?.title) st2.textContent = data.similar_video.title;
+  const sc2 = $('compSimChannel'); if (sc2 && data.similar_video?.channel_title) sc2.textContent = data.similar_video.channel_title;
+
+  if (el('compWinner'))     el('compWinner').textContent     = c.winner  || '—';
+  if (el('compSummary'))    el('compSummary').textContent    = c.summary || '';
+  if (el('compReason'))     el('compReason').textContent     = c.reason  || '';
+  if (el('compStatusBadge')) el('compStatusBadge').textContent = c.status === 'partial' ? 'Deterministic fallback' : 'AI narrative';
 }
+
 
 // ── Agent stepper ─────────────────────────────────────────────────────────────
 const CHECK_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" style="width:12px;height:12px;vertical-align:middle"><path d="M3 8l3.5 3.5L13 4"/></svg>';
@@ -339,12 +521,29 @@ if (analyzeForm) {
     analyzeBtn.classList.add('loading');
     analyzeBtn.disabled = true;
 
-    // Show stepper + skeleton
+    // Sync hero input
+    const heroIn = $('heroUrlInput');
+    if (heroIn) heroIn.value = url;
+
+    // Top progress bar — reset
+    const topBar = $('topProgressBar');
+    if (topBar) { topBar.style.width = '5%'; topBar.classList.remove('done'); topBar.style.opacity = '1'; }
+
+    // Pipeline status text
+    const pipeStatus = $('pipelineStatus');
+    if (pipeStatus) { pipeStatus.hidden = false; pipeStatus.textContent = 'Starting analysis...'; }
+
+    // Show stepper + skeleton, hide how-it-works
     agentStepper.hidden = false;
     homeSkeleton.hidden = false;
     $('home-results').hidden = true;
     $('quickCompCard').hidden = true;
+    const hiw = $('howItWorksSection'); if (hiw) hiw.style.display = 'none';
     stepperReset();
+
+    // Progress per step
+    const STEP_PROGRESS = { fetching:15, classifying:35, aggregating:55, insight:70, similar_video:85, comparing:95 };
+    const STEP_LABELS   = { fetching:'Fetching video data...', classifying:'Classifying comments...', aggregating:'Aggregating results...', insight:'Generating AI insight...', similar_video:'Finding similar video...', comparing:'Comparing videos...' };
 
     // Open SSE for live step updates
     if (sseSource) sseSource.close();
@@ -355,6 +554,9 @@ if (analyzeForm) {
       const d = JSON.parse(evt.data);
       const step = d.step;
       if (!step || step === 'done') { sseSource.close(); return; }
+      // Update top bar and status text
+      if (topBar && STEP_PROGRESS[step]) topBar.style.width = STEP_PROGRESS[step] + '%';
+      if (pipeStatus && STEP_LABELS[step]) pipeStatus.textContent = STEP_LABELS[step];
       // Mark previous steps done
       STEPS.forEach(s => {
         if (s !== step && !doneSteps.has(s)) {
@@ -366,6 +568,7 @@ if (analyzeForm) {
       stepperSet(step, 'active');
     };
     sseSource.onerror = () => sseSource.close();
+
 
     try {
       const res = await fetch('/api/analyze', {
@@ -384,6 +587,10 @@ if (analyzeForm) {
       // Mark all steps done
       STEPS.forEach(s => stepperSet(s, 'done'));
 
+      // Complete top bar and hide status text
+      if (topBar) { topBar.style.width = '100%'; setTimeout(() => topBar.classList.add('done'), 400); }
+      if (pipeStatus) { pipeStatus.hidden = true; pipeStatus.textContent = ''; }
+
       sessionStorage.setItem('vibeData', JSON.stringify(data));
       currentComments   = data.raw_comments || [];
       currentClassified = data.classified_comments || [];
@@ -399,7 +606,24 @@ if (analyzeForm) {
     } catch (err) {
       homeSkeleton.hidden = true;
       agentStepper.hidden = true;
-      showError(err.message || 'Something went wrong.');
+
+      // Classify the error for a helpful message
+      const msg = err.message || '';
+      let userMsg;
+      if (err.name === 'AbortError' || msg.toLowerCase().includes('abort')) {
+        userMsg = 'Analysis cancelled.';
+      } else if (msg.toLowerCase().includes('timeout') || msg.toLowerCase().includes('timed out') || msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('networkerror')) {
+        userMsg = 'Server took too long to respond. It may be waking up — try again in 30 seconds.';
+      } else if (msg.includes('429') || msg.toLowerCase().includes('rate limit')) {
+        userMsg = 'Rate limit reached. Please wait a moment and try again.';
+      } else if (msg.includes('Analysis failed') || msg.includes('detail')) {
+        userMsg = msg;
+      } else if (msg.toLowerCase().includes('json') || msg.toLowerCase().includes('unexpected token')) {
+        userMsg = 'Unexpected server response. Please try again.';
+      } else {
+        userMsg = msg || 'Analysis failed. Please try again.';
+      }
+      showError(userMsg);
     } finally {
       analyzeBtn.classList.remove('loading');
       analyzeBtn.disabled = false;
